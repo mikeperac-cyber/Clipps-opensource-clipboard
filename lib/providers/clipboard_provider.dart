@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../database/db_helper.dart';
+import '../models/clip_source.dart';
 import '../models/clipboard_model.dart';
 
 class ClipboardProvider extends ChangeNotifier {
@@ -15,11 +16,33 @@ class ClipboardProvider extends ChangeNotifier {
   final Set<int> _selectedIds = {};
   // Serializes addClip so each dedupe check sees the previous insert.
   Future<void> _addQueue = Future.value();
+  int _searchFocusRequests = 0;
+  bool _hotkeyUnavailable = false;
 
   List<ClipboardModel> get clips => _clips;
   String get searchText => _searchText;
   DateTimeRange? get dateRange => _dateRange;
   Set<int> get selectedIds => Set.unmodifiable(_selectedIds);
+  int get searchFocusRequests => _searchFocusRequests;
+  bool get hotkeyUnavailable => _hotkeyUnavailable;
+
+  void requestSearchFocus() {
+    _searchFocusRequests++;
+    notifyListeners();
+  }
+
+  void markHotkeyUnavailable() {
+    _hotkeyUnavailable = true;
+    notifyListeners();
+  }
+
+  Future<void> togglePin(int id) async {
+    final i = _clips.indexWhere((c) => c.id == id);
+    if (i < 0) return;
+    await _db.setPinned(id, !_clips[i].pinned);
+    _selectedIds.remove(id);
+    await load();
+  }
 
   Future<void> _reload() async {
     final r = _dateRange;
@@ -39,16 +62,19 @@ class ClipboardProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> addClip(String content) {
-    final result = _addQueue.then((_) => _add(content));
+  Future<bool> addClip(
+    String content, {
+    ClipSource source = const ClipSource(),
+  }) {
+    final result = _addQueue.then((_) => _add(content, source));
     _addQueue = result.then((_) {}, onError: (_) {});
     return result;
   }
 
-  Future<bool> _add(String content) async {
+  Future<bool> _add(String content, ClipSource source) async {
     if (content.trim().isEmpty) return false;
     if ((await _db.latestClip())?.content == content) return false;
-    await _db.insertClip(content, _clock());
+    await _db.insertClip(content, _clock(), source: source);
     await load();
     return true;
   }

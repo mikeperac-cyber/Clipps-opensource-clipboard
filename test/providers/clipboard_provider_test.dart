@@ -1,4 +1,5 @@
 import 'package:clipps/database/db_helper.dart';
+import 'package:clipps/models/clip_source.dart';
 import 'package:clipps/providers/clipboard_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -148,5 +149,49 @@ void main() {
     p.toggleSelected(p.clips.first.id);
     await p.setDateRange(null);
     expect(p.selectedIds, isEmpty);
+  });
+
+  test('addClip stores the source', () async {
+    await p.addClip('a', source: const ClipSource(app: 'Code', title: 'T'));
+    expect(p.clips.first.sourceApp, 'Code');
+    expect(p.clips.first.sourceTitle, 'T');
+  });
+
+  test('dedupe ignores pins', () async {
+    await p.addClip('a');
+    now = now.add(const Duration(minutes: 1));
+    await p.addClip('b');
+    await p.togglePin(p.clips.firstWhere((c) => c.content == 'a').id);
+    expect(await p.addClip('b'), isFalse);
+    expect(await p.addClip('a'), isTrue);
+  });
+
+  test('togglePin pins, unpins and removes from selection', () async {
+    await p.addClip('a');
+    final id = p.clips.first.id;
+    p.toggleSelected(id);
+    await p.togglePin(id);
+    expect(p.clips.first.pinned, isTrue);
+    expect(p.selectedIds, isEmpty);
+    await p.togglePin(id);
+    expect(p.clips.first.pinned, isFalse);
+    await p.togglePin(9999); // unknown id: no-op
+  });
+
+  test('requestSearchFocus increments and notifies', () {
+    var n = 0;
+    p.addListener(() => n++);
+    p.requestSearchFocus();
+    expect(p.searchFocusRequests, 1);
+    expect(n, 1);
+  });
+
+  test('markHotkeyUnavailable sets flag and notifies', () {
+    var n = 0;
+    p.addListener(() => n++);
+    expect(p.hotkeyUnavailable, isFalse);
+    p.markHotkeyUnavailable();
+    expect(p.hotkeyUnavailable, isTrue);
+    expect(n, 1);
   });
 }
