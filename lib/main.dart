@@ -39,9 +39,13 @@ Future<Widget> buildApp(String dbPath) async {
     final db = await DbHelper.open(databaseFactoryFfi, dbPath);
     final provider = ClipboardProvider(db);
     await provider.load();
-    ClipboardWatcher(onText: (t, s) async {
-      await provider.addClip(t, source: s);
-    }).start();
+    ClipboardWatcher(
+      onText: (t, s) async {
+        await provider.addClip(t, source: s);
+      },
+      onFocusSearch: provider.requestSearchFocus,
+      onHotkeyUnavailable: provider.markHotkeyUnavailable,
+    ).start();
     return ChangeNotifierProvider.value(
       value: provider,
       child: const ClippsApp(),

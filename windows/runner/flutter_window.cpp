@@ -13,6 +13,7 @@ constexpr UINT kMenuQuit = 2;
 constexpr UINT_PTR kClipboardTimer = 1;
 constexpr UINT kClipboardDelayMs = 50;
 constexpr int kClipboardMaxAttempts = 10;
+constexpr int kHotkeyId = 1;
 
 enum class ClipboardPrivacy { kPublic, kPrivate, kBusy };
 
@@ -55,8 +56,10 @@ ClipboardPrivacy CheckClipboardPrivacy(HWND hwnd) {
 }
 }  // namespace
 
-FlutterWindow::FlutterWindow(const flutter::DartProject& project)
+FlutterWindow::FlutterWindow(const flutter::DartProject& project,
+                             bool start_hidden)
     : project_(project),
+      start_hidden_(start_hidden),
       taskbar_created_message_(RegisterWindowMessageW(L"TaskbarCreated")) {}
 
 FlutterWindow::~FlutterWindow() {}
@@ -82,6 +85,9 @@ bool FlutterWindow::OnCreate() {
           flutter_controller_->engine()->messenger(), "clipps/clipboard",
           &flutter::StandardMethodCodec::GetInstance());
   AddClipboardFormatListener(GetHandle());
+  hotkey_registered_ = RegisterHotKey(GetHandle(), kHotkeyId,
+                                      MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+                                      VK_OEM_PERIOD) != 0;
 
   tray_icon_.cbSize = sizeof(tray_icon_);
   tray_icon_.hWnd = GetHandle();
@@ -95,7 +101,12 @@ bool FlutterWindow::OnCreate() {
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
+    if (!start_hidden_) {
+      this->Show();
+    }
+    if (!hotkey_registered_ && clipboard_channel_) {
+      clipboard_channel_->InvokeMethod("hotkeyUnavailable", nullptr);
+    }
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -123,6 +134,19 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // Win32Window clears its handle before OnDestroy(), so unregister here.
   if (message == WM_DESTROY) {
     RemoveClipboardFormatListener(hwnd);
+    UnregisterHotKey(hwnd, kHotkeyId);
+  }
+
+  if (message == WM_HOTKEY && wparam == kHotkeyId) {
+    if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd) {
+      ShowWindow(hwnd, SW_HIDE);
+    } else {
+      ShowAndForeground(hwnd);
+      if (clipboard_channel_) {
+        clipboard_channel_->InvokeMethod("focusSearch", nullptr);
+      }
+    }
+    return 0;
   }
 
   if (message == WM_CLOSE && !quitting_) {

@@ -128,4 +128,30 @@ void main() {
     await _native('clipboardChanged');
     expect(received, isEmpty);
   });
+
+  test('focusSearch calls onFocusSearch', () async {
+    var n = 0;
+    watcher = ClipboardWatcher(
+      onText: (t, s) async {},
+      onFocusSearch: () => n++,
+    )..start();
+    await _native('focusSearch');
+    expect(n, 1);
+  });
+
+  test('hotkeyUnavailable calls onHotkeyUnavailable', () async {
+    var n = 0;
+    watcher = ClipboardWatcher(
+      onText: (t, s) async {},
+      onHotkeyUnavailable: () => n++,
+    )..start();
+    await _native('hotkeyUnavailable');
+    expect(n, 1);
+  });
+
+  test('focusSearch without a callback is ignored', () async {
+    watcher = make(() async => 'x');
+    await _native('focusSearch');
+    expect(received, isEmpty);
+  });
 }

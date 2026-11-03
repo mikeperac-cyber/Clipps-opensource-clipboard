@@ -7,11 +7,15 @@ import '../models/clip_source.dart';
 class ClipboardWatcher {
   ClipboardWatcher({
     required this.onText,
+    this.onFocusSearch,
+    this.onHotkeyUnavailable,
     Future<String?> Function()? readText,
     this.channel = const MethodChannel('clipps/clipboard'),
   }) : _readText = readText ?? _readPlainText;
 
   final Future<void> Function(String text, ClipSource source) onText;
+  final VoidCallback? onFocusSearch;
+  final VoidCallback? onHotkeyUnavailable;
   final Future<String?> Function() _readText;
   final MethodChannel channel;
 
@@ -34,7 +38,18 @@ class ClipboardWatcher {
   void stop() => channel.setMethodCallHandler(null);
 
   Future<void> _onCall(MethodCall call) async {
-    if (call.method != 'clipboardChanged') return;
+    switch (call.method) {
+      case 'focusSearch':
+        onFocusSearch?.call();
+        return;
+      case 'hotkeyUnavailable':
+        onHotkeyUnavailable?.call();
+        return;
+      case 'clipboardChanged':
+        break;
+      default:
+        return;
+    }
     // The writing app often still holds the clipboard lock when the change
     // notification arrives, so retry briefly before giving up.
     try {

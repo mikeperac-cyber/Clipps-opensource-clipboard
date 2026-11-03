@@ -17,7 +17,8 @@
 class FlutterWindow : public Win32Window {
  public:
   // Creates a new FlutterWindow hosting a Flutter view running |project|.
-  explicit FlutterWindow(const flutter::DartProject& project);
+  // With |start_hidden| the window stays in the tray until the user opens it.
+  FlutterWindow(const flutter::DartProject& project, bool start_hidden);
   virtual ~FlutterWindow();
 
  protected:
@@ -43,6 +44,12 @@ class FlutterWindow : public Win32Window {
 
   // Broadcast when Explorer restarts; the tray icon must be re-added.
   UINT taskbar_created_message_;
+
+  // Launched with --hidden (start at login): skip showing the first frame.
+  bool start_hidden_;
+
+  // False when RegisterHotKey failed (another app owns the shortcut).
+  bool hotkey_registered_ = false;
 
   // Set by the tray "Quit" item so WM_CLOSE destroys instead of hiding.
   bool quitting_ = false;
