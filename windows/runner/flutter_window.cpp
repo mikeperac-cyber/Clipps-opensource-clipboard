@@ -1,10 +1,11 @@
 #include "flutter_window.h"
 
+#include <climits>
 #include <optional>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
-#include "utils.h"
 
 namespace {
 constexpr UINT kTrayMessage = WM_APP + 1;
@@ -16,6 +17,29 @@ constexpr int kClipboardMaxAttempts = 10;
 constexpr int kHotkeyId = 1;
 
 enum class ClipboardPrivacy { kPublic, kPrivate, kBusy };
+
+// Unlike utils.h's Utf8FromUtf16, converts the full length (no 32767 cap) and
+// replaces lone surrogates with U+FFFD instead of failing.
+std::optional<std::string> Utf8FromWide(const std::wstring& wide) {
+  if (wide.empty()) {
+    return std::string();
+  }
+  if (wide.size() > static_cast<size_t>(INT_MAX)) {
+    return std::nullopt;
+  }
+  int wide_length = static_cast<int>(wide.size());
+  int size = WideCharToMultiByte(CP_UTF8, 0, wide.data(), wide_length,
+                                 nullptr, 0, nullptr, nullptr);
+  if (size <= 0) {
+    return std::nullopt;
+  }
+  std::string utf8(static_cast<size_t>(size), '\0');
+  if (WideCharToMultiByte(CP_UTF8, 0, wide.data(), wide_length, utf8.data(),
+                          size, nullptr, nullptr) != size) {
+    return std::nullopt;
+  }
+  return utf8;
+}
 
 void ShowAndForeground(HWND hwnd) {
   ShowWindow(hwnd, SW_SHOW);
@@ -224,17 +248,19 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     // Still busy after retries: skip it rather than risk storing a secret.
     if (privacy == ClipboardPrivacy::kPublic && clipboard_channel_) {
       auto field = [](const std::wstring& value) {
-        return value.empty() ? flutter::EncodableValue()
-                             : flutter::EncodableValue(
-                                   Utf8FromUtf16(value.c_str()));
+        std::optional<std::string> utf8 = Utf8FromWide(value);
+        return value.empty() || !utf8 ? flutter::EncodableValue()
+                                      : flutter::EncodableValue(*utf8);
       };
+      std::optional<std::string> utf8_text =
+          has_text ? Utf8FromWide(text) : std::nullopt;
       flutter::EncodableMap source{
           {flutter::EncodableValue("sourceApp"), field(pending_source_.app)},
           {flutter::EncodableValue("sourceTitle"),
            field(pending_source_.title)},
           {flutter::EncodableValue("text"),
-           has_text ? flutter::EncodableValue(Utf8FromUtf16(text.c_str()))
-                    : flutter::EncodableValue()}};
+           utf8_text ? flutter::EncodableValue(*utf8_text)
+                     : flutter::EncodableValue()}};
       clipboard_channel_->InvokeMethod(
           "clipboardChanged",
           std::make_unique<flutter::EncodableValue>(std::move(source)));
