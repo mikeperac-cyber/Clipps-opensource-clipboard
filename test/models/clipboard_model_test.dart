@@ -29,4 +29,50 @@ void main() {
       expect(m.preview.endsWith('👍🏽'), isTrue);
     },
   );
+
+  ClipboardModel m({String? app, String? title}) => ClipboardModel(
+    id: 1,
+    content: 'x',
+    createdAt: DateTime(2026),
+    sourceApp: app,
+    sourceTitle: title,
+  );
+
+  test('fromMap reads source and pinned', () {
+    final c = ClipboardModel.fromMap({
+      'id': 1,
+      'content': 'x',
+      'created_at': 0,
+      'source_app': 'Google Chrome',
+      'source_title': 'Inbox',
+      'pinned': 1,
+    });
+    expect(c.sourceApp, 'Google Chrome');
+    expect(c.sourceTitle, 'Inbox');
+    expect(c.pinned, isTrue);
+  });
+
+  test('fromMap defaults when columns are null/0', () {
+    final c = ClipboardModel.fromMap({
+      'id': 1,
+      'content': 'x',
+      'created_at': 0,
+      'source_app': null,
+      'source_title': null,
+      'pinned': 0,
+    });
+    expect(c.sourceApp, isNull);
+    expect(c.sourceTitle, isNull);
+    expect(c.pinned, isFalse);
+  });
+
+  test('sourceLabel formats app and title', () {
+    expect(
+      m(app: 'Google Chrome', title: 'Inbox - Gmail').sourceLabel,
+      'Google Chrome — Inbox - Gmail',
+    );
+    expect(m(app: 'Google Chrome').sourceLabel, 'Google Chrome');
+    expect(m(title: 'Orphan title').sourceLabel, isNull);
+    expect(m().sourceLabel, isNull);
+  });
 }

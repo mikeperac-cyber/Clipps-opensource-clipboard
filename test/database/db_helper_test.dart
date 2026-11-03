@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:clipps/database/db_helper.dart';
+import 'package:clipps/models/clip_source.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -100,5 +103,108 @@ void main() {
     final got = (await db.getClips()).single;
     expect(got.id, c.id);
     expect(got.content.length, big.length);
+  });
+
+  test('insertClip stores source', () async {
+    final t = DateTime(2026, 1, 1);
+    await db.insertClip(
+      'a',
+      t,
+      source: const ClipSource(app: 'A', title: 'T'),
+    );
+    final c = (await db.getClips()).single;
+    expect(c.sourceApp, 'A');
+    expect(c.sourceTitle, 'T');
+  });
+
+  test('empty source strings are stored as NULL', () async {
+    final c = await db.insertClip(
+      'a',
+      DateTime(2026),
+      source: const ClipSource(app: '', title: ''),
+    );
+    expect(c.sourceApp, isNull);
+    final row = (await db.rawDb.query('clips')).single;
+    expect(row['source_app'], isNull);
+    expect(row['source_title'], isNull);
+  });
+
+  test('setPinned pins and unpins', () async {
+    final c = await db.insertClip('a', DateTime(2026));
+    await db.setPinned(c.id, true);
+    expect((await db.getClips()).single.pinned, isTrue);
+    await db.setPinned(c.id, false);
+    expect((await db.getClips()).single.pinned, isFalse);
+  });
+
+  test('pinned clips sort first, newest pinned first, obey filters', () async {
+    final oldest = await db.insertClip('apple 1', DateTime(2026, 1, 1));
+    final older = await db.insertClip('apple 2', DateTime(2026, 1, 2));
+    final newest = await db.insertClip('apple 3', DateTime(2026, 1, 3));
+    await db.setPinned(oldest.id, true);
+    await db.setPinned(older.id, true);
+    expect((await db.getClips()).map((e) => e.id), [
+      older.id,
+      oldest.id,
+      newest.id,
+    ]);
+    expect(await texts('3'), ['apple 3']);
+  });
+
+  test('latestClip ignores pins', () async {
+    final old = await db.insertClip('old', DateTime(2026, 1, 1));
+    final newer = await db.insertClip('new', DateTime(2026, 1, 2));
+    await db.setPinned(old.id, true);
+    expect((await db.latestClip())!.id, newer.id);
+  });
+
+  test('deleteClips never removes pinned rows', () async {
+    final p = await db.insertClip('p', DateTime(2026, 1, 1));
+    final n = await db.insertClip('n', DateTime(2026, 1, 2));
+    await db.setPinned(p.id, true);
+    expect(await db.deleteClips([p.id, n.id]), 1);
+    expect((await db.getClips()).single.id, p.id);
+  });
+
+  test('upgrade from v1 keeps rows', () async {
+    final dir = await Directory.systemTemp.createTemp('clipps_v1');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/c.db';
+    final v1 = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 1,
+        onCreate: (db, _) async {
+          await db.execute(
+            'CREATE TABLE clips('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'content TEXT NOT NULL, '
+            'created_at INTEGER NOT NULL)',
+          );
+          await db.execute(
+            'CREATE INDEX idx_clips_created_at ON clips(created_at)',
+          );
+        },
+      ),
+    );
+    await v1.insert('clips', {'content': 'one', 'created_at': 1});
+    await v1.insert('clips', {'content': 'two', 'created_at': 2});
+    await v1.close();
+
+    final up = await DbHelper.open(databaseFactoryFfi, path);
+    addTearDown(up.close);
+    final got = await up.getClips();
+    expect(got.map((c) => c.content), ['two', 'one']);
+    expect(got.every((c) => !c.pinned), isTrue);
+    expect(
+      got.every((c) => c.sourceApp == null && c.sourceTitle == null),
+      isTrue,
+    );
+    final c = await up.insertClip(
+      'three',
+      DateTime.fromMillisecondsSinceEpoch(3),
+      source: const ClipSource(app: 'A'),
+    );
+    expect(c.sourceApp, 'A');
   });
 }

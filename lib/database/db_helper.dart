@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../models/clip_source.dart';
 import '../models/clipboard_model.dart';
 
 class DbHelper {
@@ -14,7 +15,7 @@ class DbHelper {
     final db = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         // Deleted clip text must not linger in free pages on disk.
         onConfigure: (db) => db.execute('PRAGMA secure_delete = ON'),
         onCreate: (db, _) async {
@@ -22,25 +23,57 @@ class DbHelper {
             'CREATE TABLE clips('
             'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             'content TEXT NOT NULL, '
-            'created_at INTEGER NOT NULL)',
+            'created_at INTEGER NOT NULL, '
+            'source_app TEXT, '
+            'source_title TEXT, '
+            'pinned INTEGER NOT NULL DEFAULT 0)',
           );
           await db.execute(
             'CREATE INDEX idx_clips_created_at ON clips(created_at)',
           );
+        },
+        onUpgrade: (db, oldVersion, _) async {
+          if (oldVersion < 2) {
+            await db.execute('ALTER TABLE clips ADD COLUMN source_app TEXT');
+            await db.execute('ALTER TABLE clips ADD COLUMN source_title TEXT');
+            await db.execute(
+              'ALTER TABLE clips ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0',
+            );
+          }
         },
       ),
     );
     return DbHelper._(db);
   }
 
-  Future<ClipboardModel> insertClip(String content, DateTime createdAt) async {
-    final ms = createdAt.millisecondsSinceEpoch;
+  Future<ClipboardModel> insertClip(
+    String content,
+    DateTime createdAt, {
+    ClipSource source = const ClipSource(),
+  }) async {
+    final app = source.app == '' ? null : source.app;
+    final title = source.title == '' ? null : source.title;
     final id = await _db.insert('clips', {
       'content': content,
-      'created_at': ms,
+      'created_at': createdAt.millisecondsSinceEpoch,
+      'source_app': app,
+      'source_title': title,
     });
-    return ClipboardModel(id: id, content: content, createdAt: createdAt);
+    return ClipboardModel(
+      id: id,
+      content: content,
+      createdAt: createdAt,
+      sourceApp: app,
+      sourceTitle: title,
+    );
   }
+
+  Future<void> setPinned(int id, bool pinned) => _db.update(
+    'clips',
+    {'pinned': pinned ? 1 : 0},
+    where: 'id = ?',
+    whereArgs: [id],
+  );
 
   Future<ClipboardModel?> latestClip() async {
     final rows = await _db.query(
@@ -78,7 +111,7 @@ class DbHelper {
       'clips',
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: args,
-      orderBy: 'created_at DESC, id DESC',
+      orderBy: 'pinned DESC, created_at DESC, id DESC',
     );
     return rows.map(ClipboardModel.fromMap).toList();
   }
@@ -88,7 +121,7 @@ class DbHelper {
     final marks = List.filled(ids.length, '?').join(',');
     return _db.delete(
       'clips',
-      where: 'id IN ($marks)',
+      where: 'id IN ($marks) AND pinned = 0',
       whereArgs: ids.toList(),
     );
   }
