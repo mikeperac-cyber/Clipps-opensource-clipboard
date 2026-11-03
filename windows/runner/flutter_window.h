@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "clipboard_source.h"
 #include "win32_window.h"
 
 // A window that does nothing but host a Flutter view.
@@ -48,6 +49,9 @@ class FlutterWindow : public Win32Window {
 
   // Privacy-check retries for the current clipboard change.
   int clipboard_attempts_ = 0;
+
+  // Source of the latest clipboard update, sent once the privacy check passes.
+  ClipboardSource pending_source_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

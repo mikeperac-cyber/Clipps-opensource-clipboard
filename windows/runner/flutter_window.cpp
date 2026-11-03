@@ -4,6 +4,7 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+#include "utils.h"
 
 namespace {
 constexpr UINT kTrayMessage = WM_APP + 1;
@@ -163,6 +164,8 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   if (message == WM_CLIPBOARDUPDATE) {
     // Wait for the writer to release the clipboard; also coalesces bursts.
     clipboard_attempts_ = 0;
+    // Must be read now; the owner and foreground window change quickly.
+    pending_source_ = GetClipboardSource();
     SetTimer(hwnd, kClipboardTimer, kClipboardDelayMs, nullptr);
     return 0;
   }
@@ -176,7 +179,18 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     KillTimer(hwnd, kClipboardTimer);
     // Still busy after retries: skip it rather than risk storing a secret.
     if (privacy == ClipboardPrivacy::kPublic && clipboard_channel_) {
-      clipboard_channel_->InvokeMethod("clipboardChanged", nullptr);
+      auto field = [](const std::wstring& value) {
+        return value.empty() ? flutter::EncodableValue()
+                             : flutter::EncodableValue(
+                                   Utf8FromUtf16(value.c_str()));
+      };
+      flutter::EncodableMap source{
+          {flutter::EncodableValue("sourceApp"), field(pending_source_.app)},
+          {flutter::EncodableValue("sourceTitle"),
+           field(pending_source_.title)}};
+      clipboard_channel_->InvokeMethod(
+          "clipboardChanged",
+          std::make_unique<flutter::EncodableValue>(std::move(source)));
     }
     return 0;
   }

@@ -39,8 +39,8 @@ Future<Widget> buildApp(String dbPath) async {
     final db = await DbHelper.open(databaseFactoryFfi, dbPath);
     final provider = ClipboardProvider(db);
     await provider.load();
-    ClipboardWatcher(onText: (t) async {
-      await provider.addClip(t);
+    ClipboardWatcher(onText: (t, s) async {
+      await provider.addClip(t, source: s);
     }).start();
     return ChangeNotifierProvider.value(
       value: provider,

@@ -1,29 +1,39 @@
+import 'package:clipps/models/clip_source.dart';
 import 'package:clipps/services/clipboard_watcher.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Future<void> _native(String method) =>
+Future<void> _native(String method, [Object? args]) =>
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
-      'clipps/clipboard',
-      const StandardMethodCodec().encodeMethodCall(MethodCall(method)),
-      (_) {},
-    );
+          'clipps/clipboard',
+          const StandardMethodCodec().encodeMethodCall(
+            MethodCall(method, args),
+          ),
+          (_) {},
+        );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late List<String> received;
+  late List<ClipSource> sources;
   late ClipboardWatcher watcher;
 
   ClipboardWatcher make(Future<String?> Function() readText) =>
       ClipboardWatcher(
-        onText: (t) async => received.add(t),
+        onText: (t, s) async {
+          received.add(t);
+          sources.add(s);
+        },
         readText: readText,
       )..start();
 
-  setUp(() => received = []);
+  setUp(() {
+    received = [];
+    sources = [];
+  });
   tearDown(() => watcher.stop());
 
   test('clipboardChanged reads text and passes it to onText', () async {
@@ -32,25 +42,46 @@ void main() {
     expect(received, ['hello']);
   });
 
+  test('clipboardChanged passes the source map through', () async {
+    watcher = make(() async => 'hello');
+    await _native('clipboardChanged', {'sourceApp': 'A', 'sourceTitle': 'T'});
+    expect(received, ['hello']);
+    expect(sources, [const ClipSource(app: 'A', title: 'T')]);
+  });
+
+  test('missing or null argument means no source', () async {
+    watcher = make(() async => 'hello');
+    await _native('clipboardChanged');
+    expect(sources, [const ClipSource()]);
+  });
+
+  test('empty strings become null', () async {
+    watcher = make(() async => 'hello');
+    await _native('clipboardChanged', {'sourceApp': '', 'sourceTitle': ''});
+    expect(sources, [const ClipSource()]);
+  });
+
   test('null clipboard text (image/files) is ignored', () async {
     watcher = make(() async => null);
     await _native('clipboardChanged');
     expect(received, isEmpty);
   });
 
-  test('readText throwing PlatformException is ignored and later events work',
-      () async {
-    var fail = true;
-    watcher = make(() async {
-      if (fail) throw PlatformException(code: 'busy');
-      return 'ok';
-    });
-    await _native('clipboardChanged');
-    expect(received, isEmpty);
-    fail = false;
-    await _native('clipboardChanged');
-    expect(received, ['ok']);
-  });
+  test(
+    'readText throwing PlatformException is ignored and later events work',
+    () async {
+      var fail = true;
+      watcher = make(() async {
+        if (fail) throw PlatformException(code: 'busy');
+        return 'ok';
+      });
+      await _native('clipboardChanged');
+      expect(received, isEmpty);
+      fail = false;
+      await _native('clipboardChanged');
+      expect(received, ['ok']);
+    },
+  );
 
   test('onText throwing is reported and later events still work', () async {
     final reported = <FlutterErrorDetails>[];
@@ -59,7 +90,7 @@ void main() {
     addTearDown(() => FlutterError.onError = old);
     var first = true;
     watcher = ClipboardWatcher(
-      onText: (t) async {
+      onText: (t, _) async {
         if (first) {
           first = false;
           throw StateError('db down');

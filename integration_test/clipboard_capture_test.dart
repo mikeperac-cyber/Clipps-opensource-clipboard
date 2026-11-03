@@ -28,5 +28,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     expect(find.text(marker), findsOneWidget);
+    // A copy made by the app itself is owned by Clipps.
+    expect(find.textContaining('· Clipps'), findsOneWidget);
   });
 }
