@@ -45,7 +45,6 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
-  RemoveClipboardFormatListener(GetHandle());
   clipboard_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -58,6 +57,11 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Win32Window clears its handle before OnDestroy(), so unregister here.
+  if (message == WM_DESTROY) {
+    RemoveClipboardFormatListener(hwnd);
+  }
+
   if (message == WM_CLIPBOARDUPDATE) {
     if (clipboard_channel_) {
       clipboard_channel_->InvokeMethod("clipboardChanged", nullptr);

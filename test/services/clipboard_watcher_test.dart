@@ -1,4 +1,5 @@
 import 'package:clipps/services/clipboard_watcher.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -49,6 +50,29 @@ void main() {
     fail = false;
     await _native('clipboardChanged');
     expect(received, ['ok']);
+  });
+
+  test('onText throwing is reported and later events still work', () async {
+    final reported = <FlutterErrorDetails>[];
+    final old = FlutterError.onError;
+    FlutterError.onError = reported.add;
+    addTearDown(() => FlutterError.onError = old);
+    var first = true;
+    watcher = ClipboardWatcher(
+      onText: (t) async {
+        if (first) {
+          first = false;
+          throw StateError('db down');
+        }
+        received.add(t);
+      },
+      readText: () async => 'x',
+    )..start();
+    await _native('clipboardChanged');
+    expect(reported, hasLength(1));
+    expect(received, isEmpty);
+    await _native('clipboardChanged');
+    expect(received, ['x']);
   });
 
   test('a transiently locked clipboard is retried', () async {

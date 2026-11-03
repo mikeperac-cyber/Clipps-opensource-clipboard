@@ -26,17 +26,29 @@ class ClipboardWatcher {
     if (call.method != 'clipboardChanged') return;
     // The writing app often still holds the clipboard lock when the change
     // notification arrives, so retry briefly before giving up.
-    for (var attempt = 1; attempt <= _maxReadAttempts; attempt++) {
-      try {
-        final text = await _readText();
+    try {
+      for (var attempt = 1; attempt <= _maxReadAttempts; attempt++) {
+        String? text;
+        try {
+          text = await _readText();
+        } on PlatformException catch (e) {
+          debugPrint('Clipboard read failed (attempt $attempt): $e');
+          if (attempt < _maxReadAttempts) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+          continue;
+        }
         if (text != null) await onText(text);
         return;
-      } on PlatformException catch (e) {
-        debugPrint('Clipboard read failed (attempt $attempt): $e');
-        if (attempt < _maxReadAttempts) {
-          await Future<void>.delayed(const Duration(milliseconds: 50));
-        }
       }
+    } catch (e, s) {
+      // Native drops error replies, so surface failures here instead.
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: e,
+        stack: s,
+        library: 'clipps',
+        context: ErrorDescription('while capturing a clipboard change'),
+      ));
     }
   }
 }
