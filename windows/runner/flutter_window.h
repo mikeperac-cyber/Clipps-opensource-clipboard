@@ -45,6 +45,9 @@ class FlutterWindow : public Win32Window {
 
   // Set by the tray "Quit" item so WM_CLOSE destroys instead of hiding.
   bool quitting_ = false;
+
+  // Privacy-check retries for the current clipboard change.
+  int clipboard_attempts_ = 0;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

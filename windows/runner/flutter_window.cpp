@@ -9,6 +9,11 @@ namespace {
 constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kMenuOpen = 1;
 constexpr UINT kMenuQuit = 2;
+constexpr UINT_PTR kClipboardTimer = 1;
+constexpr UINT kClipboardDelayMs = 50;
+constexpr int kClipboardMaxAttempts = 10;
+
+enum class ClipboardPrivacy { kPublic, kPrivate, kBusy };
 
 void ShowAndForeground(HWND hwnd) {
   ShowWindow(hwnd, SW_SHOW);
@@ -17,7 +22,7 @@ void ShowAndForeground(HWND hwnd) {
 }
 
 // Password managers set these formats so clipboard history tools skip secrets.
-bool ClipboardIsPrivate(HWND hwnd) {
+ClipboardPrivacy CheckClipboardPrivacy(HWND hwnd) {
   static const UINT kExclude = RegisterClipboardFormatW(
       L"ExcludeClipboardContentFromMonitorProcessing");
   static const UINT kViewerIgnore =
@@ -26,21 +31,26 @@ bool ClipboardIsPrivate(HWND hwnd) {
       RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
   if (IsClipboardFormatAvailable(kExclude) ||
       IsClipboardFormatAvailable(kViewerIgnore)) {
-    return true;
+    return ClipboardPrivacy::kPrivate;
+  }
+  if (!IsClipboardFormatAvailable(kCanInclude)) {
+    return ClipboardPrivacy::kPublic;
+  }
+  // The writer often still holds the clipboard right after the update.
+  if (!OpenClipboard(hwnd)) {
+    return ClipboardPrivacy::kBusy;
   }
   bool blocked = false;
-  if (IsClipboardFormatAvailable(kCanInclude) && OpenClipboard(hwnd)) {
-    HANDLE data = GetClipboardData(kCanInclude);
-    if (data) {
-      const DWORD* value = static_cast<const DWORD*>(GlobalLock(data));
-      if (value) {
-        blocked = GlobalSize(data) >= sizeof(DWORD) && *value == 0;
-        GlobalUnlock(data);
-      }
+  HANDLE data = GetClipboardData(kCanInclude);
+  if (data) {
+    const DWORD* value = static_cast<const DWORD*>(GlobalLock(data));
+    if (value) {
+      blocked = GlobalSize(data) >= sizeof(DWORD) && *value == 0;
+      GlobalUnlock(data);
     }
-    CloseClipboard();
   }
-  return blocked;
+  CloseClipboard();
+  return blocked ? ClipboardPrivacy::kPrivate : ClipboardPrivacy::kPublic;
 }
 }  // namespace
 
@@ -151,7 +161,21 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   if (message == WM_CLIPBOARDUPDATE) {
-    if (clipboard_channel_ && !ClipboardIsPrivate(hwnd)) {
+    // Wait for the writer to release the clipboard; also coalesces bursts.
+    clipboard_attempts_ = 0;
+    SetTimer(hwnd, kClipboardTimer, kClipboardDelayMs, nullptr);
+    return 0;
+  }
+
+  if (message == WM_TIMER && wparam == kClipboardTimer) {
+    ClipboardPrivacy privacy = CheckClipboardPrivacy(hwnd);
+    if (privacy == ClipboardPrivacy::kBusy &&
+        ++clipboard_attempts_ < kClipboardMaxAttempts) {
+      return 0;
+    }
+    KillTimer(hwnd, kClipboardTimer);
+    // Still busy after retries: skip it rather than risk storing a secret.
+    if (privacy == ClipboardPrivacy::kPublic && clipboard_channel_) {
       clipboard_channel_->InvokeMethod("clipboardChanged", nullptr);
     }
     return 0;
