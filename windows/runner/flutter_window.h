@@ -6,6 +6,8 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
+#include <shellapi.h>
+
 #include <memory>
 
 #include "win32_window.h"
@@ -34,6 +36,12 @@ class FlutterWindow : public Win32Window {
   // Tells Dart when the OS clipboard changes (WM_CLIPBOARDUPDATE).
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       clipboard_channel_;
+
+  // Tray icon; hWnd is kept here because GetHandle() is null in OnDestroy().
+  NOTIFYICONDATAW tray_icon_ = {};
+
+  // Set by the tray "Quit" item so WM_CLOSE destroys instead of hiding.
+  bool quitting_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
