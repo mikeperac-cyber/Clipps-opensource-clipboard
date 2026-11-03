@@ -16,19 +16,48 @@ class ClippsApp extends StatelessWidget {
       const MaterialApp(title: 'Clipps', home: HomeScreen());
 }
 
+Widget _errorApp(Object error, StackTrace stack) {
+  debugPrint('Clipps startup failed: $error\n$stack');
+  return MaterialApp(
+    title: 'Clipps',
+    home: Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SelectableText(
+          'Clipps could not open its clip history.\n$error',
+        ),
+      ),
+    ),
+  );
+}
+
+/// The app wired to the database at [dbPath], or an error screen if that fails.
+Future<Widget> buildApp(String dbPath) async {
+  try {
+    sqfliteFfiInit();
+    final db = await DbHelper.open(databaseFactoryFfi, dbPath);
+    final provider = ClipboardProvider(db);
+    await provider.load();
+    return ChangeNotifierProvider.value(
+      value: provider,
+      child: const ClippsApp(),
+    );
+  } catch (e, s) {
+    return _errorApp(e, s);
+  }
+}
+
 Future<void> startApp(String dbPath) async {
   WidgetsFlutterBinding.ensureInitialized();
-  sqfliteFfiInit();
-  final db = await DbHelper.open(databaseFactoryFfi, dbPath);
-  final provider = ClipboardProvider(db);
-  await provider.load();
-  runApp(
-    ChangeNotifierProvider.value(value: provider, child: const ClippsApp()),
-  );
+  runApp(await buildApp(dbPath));
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final dir = await getApplicationSupportDirectory();
-  await startApp(p.join(dir.path, 'clipps.db'));
+  try {
+    final dir = await getApplicationSupportDirectory();
+    await startApp(p.join(dir.path, 'clipps.db'));
+  } catch (e, s) {
+    runApp(_errorApp(e, s));
+  }
 }
