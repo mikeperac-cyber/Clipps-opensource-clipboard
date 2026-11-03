@@ -2,6 +2,7 @@ import 'package:clipps/database/db_helper.dart';
 import 'package:clipps/providers/clipboard_provider.dart';
 import 'package:clipps/screens/home_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -73,6 +74,50 @@ void main() {
       );
     },
   );
+
+  testWidgets('Save Clip with a duplicate shows "Nothing new to save"', (
+    t,
+  ) async {
+    await show(t, clips: ['a']);
+    await t.enterText(find.byKey(const Key('manualInput')), 'a');
+    await tapKey(t, 'saveClip');
+    expect(find.text('Nothing new to save'), findsOneWidget);
+    expect(p.clips.length, 1);
+    expect(
+      t
+          .widget<TextField>(find.byKey(const Key('manualInput')))
+          .controller!
+          .text,
+      'a',
+    );
+  });
+
+  testWidgets('tapping a row copies its full content and shows Copied', (
+    t,
+  ) async {
+    final long = 'x' * 600;
+    final copied = <String?>[];
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied.add((call.arguments as Map)['text'] as String?);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await show(t, clips: [long]);
+    await t.tap(find.byKey(Key('clip-${p.clips.first.id}')));
+    await t.pump();
+    expect(copied, [long]);
+    expect(find.text('Copied'), findsOneWidget);
+  });
 
   testWidgets('Save Clip with blank text saves nothing', (t) async {
     await show(t);

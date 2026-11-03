@@ -40,6 +40,9 @@ class FlutterWindow : public Win32Window {
   // Tray icon; hWnd is kept here because GetHandle() is null in OnDestroy().
   NOTIFYICONDATAW tray_icon_ = {};
 
+  // Broadcast when Explorer restarts; the tray icon must be re-added.
+  UINT taskbar_created_message_;
+
   // Set by the tray "Quit" item so WM_CLOSE destroys instead of hiding.
   bool quitting_ = false;
 };

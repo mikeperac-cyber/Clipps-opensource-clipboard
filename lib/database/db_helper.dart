@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/clipboard_model.dart';
@@ -6,11 +7,16 @@ class DbHelper {
   final Database _db;
   DbHelper._(this._db);
 
+  @visibleForTesting
+  Database get rawDb => _db;
+
   static Future<DbHelper> open(DatabaseFactory factory, String path) async {
     final db = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
         version: 1,
+        // Deleted clip text must not linger in free pages on disk.
+        onConfigure: (db) => db.execute('PRAGMA secure_delete = ON'),
         onCreate: (db, _) async {
           await db.execute(
             'CREATE TABLE clips('

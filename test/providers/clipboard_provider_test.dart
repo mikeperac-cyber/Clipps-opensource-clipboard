@@ -138,4 +138,15 @@ void main() {
     await p.deleteSelected();
     expect(n, 4);
   });
+
+  test('changing search text or date range clears the selection', () async {
+    await p.addClip('a');
+    p.toggleSelected(p.clips.first.id);
+    await p.setSearchText('zzz');
+    expect(p.selectedIds, isEmpty);
+    await p.setSearchText('');
+    p.toggleSelected(p.clips.first.id);
+    await p.setDateRange(null);
+    expect(p.selectedIds, isEmpty);
+  });
 }

@@ -15,6 +15,11 @@ void main() {
     for (final c in await db.getClips(text: q)) c.content,
   ];
 
+  test('secure_delete is on after open', () async {
+    final r = await db.rawDb.rawQuery('PRAGMA secure_delete');
+    expect(r.first.values.first, 1);
+  });
+
   test('insertClip returns the stored clip with an id', () async {
     final t = DateTime(2026, 1, 1, 10);
     final c = await db.insertClip('hello', t);

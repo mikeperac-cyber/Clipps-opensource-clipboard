@@ -15,10 +15,38 @@ void ShowAndForeground(HWND hwnd) {
   ShowWindow(hwnd, SW_RESTORE);
   SetForegroundWindow(hwnd);
 }
+
+// Password managers set these formats so clipboard history tools skip secrets.
+bool ClipboardIsPrivate(HWND hwnd) {
+  static const UINT kExclude = RegisterClipboardFormatW(
+      L"ExcludeClipboardContentFromMonitorProcessing");
+  static const UINT kViewerIgnore =
+      RegisterClipboardFormatW(L"Clipboard Viewer Ignore");
+  static const UINT kCanInclude =
+      RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
+  if (IsClipboardFormatAvailable(kExclude) ||
+      IsClipboardFormatAvailable(kViewerIgnore)) {
+    return true;
+  }
+  bool blocked = false;
+  if (IsClipboardFormatAvailable(kCanInclude) && OpenClipboard(hwnd)) {
+    HANDLE data = GetClipboardData(kCanInclude);
+    if (data) {
+      const DWORD* value = static_cast<const DWORD*>(GlobalLock(data));
+      if (value) {
+        blocked = GlobalSize(data) >= sizeof(DWORD) && *value == 0;
+        GlobalUnlock(data);
+      }
+    }
+    CloseClipboard();
+  }
+  return blocked;
+}
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
-    : project_(project) {}
+    : project_(project),
+      taskbar_created_message_(RegisterWindowMessageW(L"TaskbarCreated")) {}
 
 FlutterWindow::~FlutterWindow() {}
 
@@ -105,6 +133,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x,
                                 pt.y, 0, hwnd, nullptr);
       DestroyMenu(menu);
+      PostMessage(hwnd, WM_NULL, 0, 0);
       if (cmd == kMenuOpen) {
         ShowAndForeground(hwnd);
       } else if (cmd == kMenuQuit) {
@@ -115,8 +144,14 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return 0;
   }
 
+  if (message == taskbar_created_message_) {
+    // Explorer restarted and dropped all tray icons.
+    Shell_NotifyIcon(NIM_ADD, &tray_icon_);
+    return 0;
+  }
+
   if (message == WM_CLIPBOARDUPDATE) {
-    if (clipboard_channel_) {
+    if (clipboard_channel_ && !ClipboardIsPrivate(hwnd)) {
       clipboard_channel_->InvokeMethod("clipboardChanged", nullptr);
     }
     return 0;

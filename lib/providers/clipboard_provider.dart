@@ -55,11 +55,13 @@ class ClipboardProvider extends ChangeNotifier {
 
   Future<void> setSearchText(String text) async {
     _searchText = text;
+    _selectedIds.clear();
     await load();
   }
 
   Future<void> setDateRange(DateTimeRange? range) async {
     _dateRange = range;
+    _selectedIds.clear();
     await load();
   }
 

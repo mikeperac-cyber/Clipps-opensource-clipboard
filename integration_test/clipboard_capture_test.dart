@@ -9,9 +9,17 @@ import 'package:path/path.dart' as p;
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('text copied to the OS clipboard appears in history',
-      (tester) async {
+  testWidgets('text copied to the OS clipboard appears in history', (
+    tester,
+  ) async {
     final dir = await Directory.systemTemp.createTemp('clipps_it');
+    addTearDown(() async {
+      try {
+        await dir.delete(recursive: true);
+      } on FileSystemException {
+        // DB file may still be locked on Windows.
+      }
+    });
     await startApp(p.join(dir.path, 'clips.db'));
     final marker = 'clipps-it-${DateTime.now().microsecondsSinceEpoch}';
     // Goes through the real OS clipboard and WM_CLIPBOARDUPDATE.

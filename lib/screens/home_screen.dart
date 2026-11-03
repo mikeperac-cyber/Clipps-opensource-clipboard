@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/clipboard_provider.dart';
@@ -65,6 +66,7 @@ class HomeScreen extends StatelessWidget {
                 if (range != null)
                   IconButton(
                     key: const Key('clearDateRange'),
+                    tooltip: 'Clear date range',
                     icon: const Icon(Icons.clear),
                     onPressed: () => p.setDateRange(null),
                   ),
@@ -82,6 +84,12 @@ class HomeScreen extends StatelessWidget {
                       final clip = p.clips[i];
                       return ListTile(
                         key: Key('clip-${clip.id}'),
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: clip.content));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Copied')),
+                          );
+                        },
                         leading: Checkbox(
                           key: Key('select-${clip.id}'),
                           value: p.selectedIds.contains(clip.id),
@@ -97,6 +105,7 @@ class HomeScreen extends StatelessWidget {
                         ),
                         trailing: IconButton(
                           key: Key('delete-${clip.id}'),
+                          tooltip: 'Delete clip',
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () => _confirmDelete(
                             context,
@@ -154,8 +163,15 @@ class _ManualInputState extends State<_ManualInput> {
 
   Future<void> _save() async {
     // Only clear when saved, so a skipped duplicate doesn't eat the user's text.
-    if (await context.read<ClipboardProvider>().addClip(_controller.text)) {
+    final saved = await context.read<ClipboardProvider>().addClip(
+      _controller.text,
+    );
+    if (!mounted) return;
+    if (saved) {
       _controller.clear();
+    } else {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Nothing new to save')));
     }
   }
 
