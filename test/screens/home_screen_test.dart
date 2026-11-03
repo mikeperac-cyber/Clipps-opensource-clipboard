@@ -1,4 +1,5 @@
 import 'package:clipps/database/db_helper.dart';
+import 'package:clipps/models/clip_source.dart';
 import 'package:clipps/providers/clipboard_provider.dart';
 import 'package:clipps/screens/home_screen.dart';
 import 'package:flutter/material.dart';
@@ -206,5 +207,89 @@ void main() {
           .first,
     );
     expect(title.data!.length, 500);
+  });
+
+  Future<int> seed(WidgetTester t, String c, {ClipSource? source}) async {
+    final m = await t.runAsync(
+      () => db.insertClip(
+        c,
+        DateTime.now(),
+        source: source ?? const ClipSource(),
+      ),
+    );
+    return m!.id;
+  }
+
+  testWidgets('subtitle shows app and title', (t) async {
+    await seed(
+      t,
+      'a',
+      source: const ClipSource(app: 'Google Chrome', title: 'Inbox'),
+    );
+    await show(t);
+    expect(find.textContaining('· Google Chrome — Inbox'), findsOneWidget);
+  });
+
+  testWidgets('subtitle shows only timestamp without source', (t) async {
+    await show(t, clips: ['a']);
+    final sub =
+        t.widget<ListTile>(find.byKey(Key('clip-${p.clips.first.id}'))).subtitle
+            as Text;
+    expect(sub.data, isNot(contains('·')));
+    expect(sub.data!.length, 19);
+  });
+
+  testWidgets('pin moves row to top and disables checkbox and delete', (
+    t,
+  ) async {
+    await show(t, clips: ['a', 'b']);
+    final aId = p.clips.last.id;
+    expect(find.byTooltip('Pin'), findsNWidgets(2));
+    await tapKey(t, 'pin-$aId');
+    expect(p.clips.first.id, aId);
+    expect(find.byTooltip('Unpin'), findsOneWidget);
+    expect(
+      t.widget<Checkbox>(find.byKey(Key('select-$aId'))).onChanged,
+      isNull,
+    );
+    expect(
+      t.widget<IconButton>(find.byKey(Key('delete-$aId'))).onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('pinned delete button tooltip is "Unpin to delete"', (t) async {
+    await show(t, clips: ['a']);
+    await tapKey(t, 'pin-${p.clips.first.id}');
+    expect(find.byTooltip('Unpin to delete'), findsOneWidget);
+  });
+
+  testWidgets('requestSearchFocus focuses the search field and selects text', (
+    t,
+  ) async {
+    await show(t);
+    await t.enterText(find.byKey(const Key('search')), 'hello');
+    await t.tap(find.byKey(const Key('manualInput')));
+    await t.pump();
+    p.requestSearchFocus();
+    await t.pump();
+    await t.pump();
+    final tf = t.widget<TextField>(find.byKey(const Key('search')));
+    expect(tf.focusNode!.hasFocus, isTrue);
+    expect(
+      tf.controller!.selection,
+      const TextSelection(baseOffset: 0, extentOffset: 5),
+    );
+  });
+
+  testWidgets('hotkeyUnavailable shows the warning line', (t) async {
+    await show(t);
+    expect(find.byKey(const Key('hotkeyWarning')), findsNothing);
+    p.markHotkeyUnavailable();
+    await t.pump();
+    expect(
+      find.text('Shortcut Ctrl+Alt+. is already used by another app'),
+      findsOneWidget,
+    );
   });
 }

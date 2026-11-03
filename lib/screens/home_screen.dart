@@ -32,15 +32,23 @@ class HomeScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
+          if (p.hotkeyUnavailable)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              child: Text(
+                'Shortcut Ctrl+Alt+. is already used by another app',
+                key: const Key('hotkeyWarning'),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
           const _ManualInput(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    key: const Key('search'),
-                    decoration: const InputDecoration(hintText: 'Search clips'),
+                  child: _SearchField(
+                    focusRequests: p.searchFocusRequests,
                     onChanged: p.setSearchText,
                   ),
                 ),
@@ -82,8 +90,14 @@ class HomeScreen extends StatelessWidget {
                     itemCount: p.clips.length,
                     itemBuilder: (context, i) {
                       final clip = p.clips[i];
+                      final pinned = clip.pinned;
+                      final label = clip.sourceLabel;
                       return ListTile(
                         key: Key('clip-${clip.id}'),
+                        tileColor: pinned
+                            ? Theme.of(context).colorScheme.secondaryContainer
+                                  .withValues(alpha: 0.35)
+                            : null,
                         onTap: () {
                           Clipboard.setData(ClipboardData(text: clip.content));
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -93,7 +107,9 @@ class HomeScreen extends StatelessWidget {
                         leading: Checkbox(
                           key: Key('select-${clip.id}'),
                           value: p.selectedIds.contains(clip.id),
-                          onChanged: (_) => p.toggleSelected(clip.id),
+                          onChanged: pinned
+                              ? null
+                              : (_) => p.toggleSelected(clip.id),
                         ),
                         title: Text(
                           clip.preview,
@@ -101,16 +117,37 @@ class HomeScreen extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
-                          clip.createdAt.toLocal().toString().substring(0, 19),
+                          clip.createdAt.toLocal().toString().substring(0, 19) +
+                              (label == null ? '' : ' · $label'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        trailing: IconButton(
-                          key: Key('delete-${clip.id}'),
-                          tooltip: 'Delete clip',
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () => _confirmDelete(
-                            context,
-                            1,
-                          ).then((ok) => ok ? p.deleteClip(clip.id) : null),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              key: Key('pin-${clip.id}'),
+                              tooltip: pinned ? 'Unpin' : 'Pin',
+                              icon: Icon(
+                                pinned
+                                    ? Icons.push_pin
+                                    : Icons.push_pin_outlined,
+                              ),
+                              onPressed: () => p.togglePin(clip.id),
+                            ),
+                            IconButton(
+                              key: Key('delete-${clip.id}'),
+                              tooltip: pinned
+                                  ? 'Unpin to delete'
+                                  : 'Delete clip',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: pinned
+                                  ? null
+                                  : () => _confirmDelete(context, 1).then(
+                                      (ok) => ok ? p.deleteClip(clip.id) : null,
+                                    ),
+                            ),
+                          ],
                         ),
                       );
                     },
@@ -201,6 +238,54 @@ class _ManualInputState extends State<_ManualInput> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SearchField extends StatefulWidget {
+  const _SearchField({required this.focusRequests, required this.onChanged});
+
+  final int focusRequests;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_SearchField> createState() => _SearchFieldState();
+}
+
+class _SearchFieldState extends State<_SearchField> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void didUpdateWidget(_SearchField old) {
+    super.didUpdateWidget(old);
+    if (widget.focusRequests != old.focusRequests) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _focus.requestFocus();
+        _controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controller.text.length,
+        );
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      key: const Key('search'),
+      controller: _controller,
+      focusNode: _focus,
+      decoration: const InputDecoration(hintText: 'Search clips'),
+      onChanged: widget.onChanged,
     );
   }
 }
