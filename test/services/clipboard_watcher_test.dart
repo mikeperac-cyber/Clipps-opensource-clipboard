@@ -42,6 +42,29 @@ void main() {
     expect(received, ['hello']);
   });
 
+  test('text in args is delivered and readText is never called', () async {
+    var reads = 0;
+    watcher = make(() async {
+      reads++;
+      return 'late';
+    });
+    await _native('clipboardChanged', {'sourceApp': 'A', 'text': 'native'});
+    expect(received, ['native']);
+    expect(sources, [const ClipSource(app: 'A')]);
+    expect(reads, 0);
+  });
+
+  test('text: null means no text and does not read', () async {
+    var reads = 0;
+    watcher = make(() async {
+      reads++;
+      return 'late';
+    });
+    await _native('clipboardChanged', {'sourceApp': 'A', 'text': null});
+    expect(received, isEmpty);
+    expect(reads, 0);
+  });
+
   test('clipboardChanged passes the source map through', () async {
     watcher = make(() async => 'hello');
     await _native('clipboardChanged', {'sourceApp': 'A', 'sourceTitle': 'T'});

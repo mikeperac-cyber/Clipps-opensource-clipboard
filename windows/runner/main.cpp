@@ -22,7 +22,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return EXIT_SUCCESS;
   }
 
-#ifdef NDEBUG
+#ifdef CLIPPS_RELEASE
   // Start at login; rewritten every launch so the path follows the exe.
   {
     wchar_t exe[MAX_PATH];

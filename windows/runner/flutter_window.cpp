@@ -24,35 +24,53 @@ void ShowAndForeground(HWND hwnd) {
 }
 
 // Password managers set these formats so clipboard history tools skip secrets.
-ClipboardPrivacy CheckClipboardPrivacy(HWND hwnd) {
+// The verdict and the text are taken in one clipboard session so they describe
+// the same contents.
+ClipboardPrivacy ReadClipboard(HWND hwnd, std::wstring* text, bool* has_text) {
   static const UINT kExclude = RegisterClipboardFormatW(
       L"ExcludeClipboardContentFromMonitorProcessing");
   static const UINT kViewerIgnore =
       RegisterClipboardFormatW(L"Clipboard Viewer Ignore");
   static const UINT kCanInclude =
       RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
-  if (IsClipboardFormatAvailable(kExclude) ||
-      IsClipboardFormatAvailable(kViewerIgnore)) {
-    return ClipboardPrivacy::kPrivate;
-  }
-  if (!IsClipboardFormatAvailable(kCanInclude)) {
-    return ClipboardPrivacy::kPublic;
-  }
   // The writer often still holds the clipboard right after the update.
   if (!OpenClipboard(hwnd)) {
     return ClipboardPrivacy::kBusy;
   }
-  bool blocked = false;
-  HANDLE data = GetClipboardData(kCanInclude);
-  if (data) {
-    const DWORD* value = static_cast<const DWORD*>(GlobalLock(data));
-    if (value) {
-      blocked = GlobalSize(data) >= sizeof(DWORD) && *value == 0;
-      GlobalUnlock(data);
+  ClipboardPrivacy result = ClipboardPrivacy::kPublic;
+  if (IsClipboardFormatAvailable(kExclude) ||
+      IsClipboardFormatAvailable(kViewerIgnore)) {
+    result = ClipboardPrivacy::kPrivate;
+  } else if (IsClipboardFormatAvailable(kCanInclude)) {
+    HANDLE data = GetClipboardData(kCanInclude);
+    if (data) {
+      const DWORD* value = static_cast<const DWORD*>(GlobalLock(data));
+      if (value) {
+        if (GlobalSize(data) >= sizeof(DWORD) && *value == 0) {
+          result = ClipboardPrivacy::kPrivate;
+        }
+        GlobalUnlock(data);
+      }
+    }
+  }
+  if (result == ClipboardPrivacy::kPublic) {
+    HANDLE data = GetClipboardData(CF_UNICODETEXT);
+    if (data) {
+      const wchar_t* value = static_cast<const wchar_t*>(GlobalLock(data));
+      if (value) {
+        size_t max_chars = GlobalSize(data) / sizeof(wchar_t);
+        size_t length = wcsnlen(value, max_chars);
+        // Not NUL-terminated within the block: treat as no text.
+        if (length < max_chars) {
+          text->assign(value, length);
+          *has_text = true;
+        }
+        GlobalUnlock(data);
+      }
     }
   }
   CloseClipboard();
-  return blocked ? ClipboardPrivacy::kPrivate : ClipboardPrivacy::kPublic;
+  return result;
 }
 }  // namespace
 
@@ -195,7 +213,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   if (message == WM_TIMER && wparam == kClipboardTimer) {
-    ClipboardPrivacy privacy = CheckClipboardPrivacy(hwnd);
+    std::wstring text;
+    bool has_text = false;
+    ClipboardPrivacy privacy = ReadClipboard(hwnd, &text, &has_text);
     if (privacy == ClipboardPrivacy::kBusy &&
         ++clipboard_attempts_ < kClipboardMaxAttempts) {
       return 0;
@@ -211,7 +231,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       flutter::EncodableMap source{
           {flutter::EncodableValue("sourceApp"), field(pending_source_.app)},
           {flutter::EncodableValue("sourceTitle"),
-           field(pending_source_.title)}};
+           field(pending_source_.title)},
+          {flutter::EncodableValue("text"),
+           has_text ? flutter::EncodableValue(Utf8FromUtf16(text.c_str()))
+                    : flutter::EncodableValue()}};
       clipboard_channel_->InvokeMethod(
           "clipboardChanged",
           std::make_unique<flutter::EncodableValue>(std::move(source)));

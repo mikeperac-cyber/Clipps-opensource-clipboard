@@ -73,6 +73,11 @@ ClipboardSource GetClipboardSource() {
     source.app = AppNameFromPath(path);
   }
 
+  // Our own copies carry no window title.
+  if (owner_pid == GetCurrentProcessId()) {
+    return source;
+  }
+
   // A title from another process would describe something that did not copy.
   HWND foreground = GetForegroundWindow();
   DWORD foreground_pid = 0;

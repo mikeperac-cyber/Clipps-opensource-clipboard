@@ -50,6 +50,20 @@ class ClipboardWatcher {
       default:
         return;
     }
+    // Native reads the text in the same clipboard session as its privacy check;
+    // a present key with a null value means "no text", never "read it yourself".
+    final args = call.arguments;
+    if (args is Map && args.containsKey('text')) {
+      final text = args['text'];
+      if (text is String) {
+        try {
+          await onText(text, _sourceOf(args));
+        } catch (e, s) {
+          _report(e, s);
+        }
+      }
+      return;
+    }
     // The writing app often still holds the clipboard lock when the change
     // notification arrives, so retry briefly before giving up.
     try {
@@ -69,14 +83,16 @@ class ClipboardWatcher {
       }
     } catch (e, s) {
       // Native drops error replies, so surface failures here instead.
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: e,
-          stack: s,
-          library: 'clipps',
-          context: ErrorDescription('while capturing a clipboard change'),
-        ),
-      );
+      _report(e, s);
     }
   }
+
+  static void _report(Object e, StackTrace s) => FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: e,
+      stack: s,
+      library: 'clipps',
+      context: ErrorDescription('while capturing a clipboard change'),
+    ),
+  );
 }

@@ -30,6 +30,8 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
+# Profile builds also define NDEBUG; only true Release registers start-at-login.
+target_compile_definitions(${BINARY_NAME} PRIVATE "$<$<CONFIG:Release>:CLIPPS_RELEASE>")
 
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.
