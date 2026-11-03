@@ -51,7 +51,7 @@ bool FlutterWindow::OnCreate() {
   tray_icon_.uCallbackMessage = kTrayMessage;
   tray_icon_.hIcon = LoadIcon(GetModuleHandle(nullptr),
                               MAKEINTRESOURCE(IDI_APP_ICON));
-  wcscpy_s(tray_icon_.szTip, L"Clipps — clipboard history");
+  wcscpy_s(tray_icon_.szTip, L"Clipps \u2014 clipboard history");
   Shell_NotifyIcon(NIM_ADD, &tray_icon_);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
