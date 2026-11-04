@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'database/db_helper.dart';
 import 'providers/clipboard_provider.dart';
 import 'screens/home_screen.dart';
+import 'services/backup_service.dart';
 import 'services/clipboard_watcher.dart';
 
 class ClippsApp extends StatelessWidget {
@@ -39,6 +40,8 @@ Future<Widget> buildApp(String dbPath) async {
     final db = await DbHelper.open(databaseFactoryFfi, dbPath);
     final provider = ClipboardProvider(db);
     await provider.load();
+    provider.startRetentionTimer();
+    BackupService(db, p.join(p.dirname(dbPath), 'backups')).start();
     ClipboardWatcher(
       onText: (t, s) async {
         await provider.addClip(t, source: s);
