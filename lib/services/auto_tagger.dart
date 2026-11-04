@@ -13,7 +13,8 @@ final _keyPrefix = RegExp(
   r'|(?<![\w-])AIza[\w-]{35}'
   r'|(?<![\w-])eyJ[\w-]+\.eyJ[\w-]+\.',
 );
-final _token = RegExp(r'^[A-Za-z0-9_+/=-]{32,}$');
+// Negated class, searched: a quantified loop overflows the regex stack on MB-sized text.
+final _notToken = RegExp(r'[^A-Za-z0-9_+/=-]');
 
 int _digits(String s) => RegExp(r'\d').allMatches(s).length;
 
@@ -31,7 +32,8 @@ List<String> detectTags(String text) {
   final secret =
       _keyPrefix.hasMatch(t) ||
       (!link &&
-          _token.hasMatch(t) &&
+          t.length >= 32 &&
+          !_notToken.hasMatch(t) &&
           t.contains(RegExp(r'[A-Z]')) &&
           t.contains(RegExp(r'[a-z]')) &&
           t.contains(RegExp(r'\d')));

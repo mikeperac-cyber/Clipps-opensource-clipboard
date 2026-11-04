@@ -75,4 +75,60 @@ void main() {
     expect(m(title: 'Orphan title').sourceLabel, isNull);
     expect(m().sourceLabel, isNull);
   });
+
+  test('fromMap reads deletedAt, taskState, groupId and tags', () {
+    final m = ClipboardModel.fromMap({
+      'id': 1,
+      'content': 'x',
+      'created_at': 1,
+      'deleted_at': 5,
+      'task_state': 1,
+      'group_id': 3,
+      'tags': 'Link\u001FWork',
+    });
+    expect(m.deletedAt, DateTime.fromMillisecondsSinceEpoch(5));
+    expect(m.taskState, TaskState.done);
+    expect(m.groupId, 3);
+    expect(m.tags, ['Link', 'Work']);
+    final d = ClipboardModel.fromMap({
+      'id': 1,
+      'content': 'x',
+      'created_at': 1,
+    });
+    expect(d.deletedAt, isNull);
+    expect(d.taskState, TaskState.none);
+    expect(d.tags, isEmpty);
+    expect(
+      ClipboardModel.fromMap({
+        'id': 1,
+        'content': 'x',
+        'created_at': 1,
+        'task_state': 0,
+      }).taskState,
+      TaskState.open,
+    );
+  });
+
+  test('tags order: auto in kAutoTags order, then manual A-Z', () {
+    final m = ClipboardModel.fromMap({
+      'id': 1,
+      'content': 'x',
+      'created_at': 1,
+      'tags': 'zeta\u001FSecret\u001Falpha\u001FLink\u001FCode',
+    });
+    expect(m.tags, ['Link', 'Code', 'Secret', 'alpha', 'zeta']);
+  });
+
+  test('isSecret ignores case', () {
+    expect(
+      ClipboardModel(
+        id: 1,
+        content: 'x',
+        createdAt: DateTime(2026),
+        tags: const ['secret'],
+      ).isSecret,
+      isTrue,
+    );
+    expect(_clip('x').isSecret, isFalse);
+  });
 }
