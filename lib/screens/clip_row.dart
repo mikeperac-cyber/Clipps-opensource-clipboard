@@ -213,7 +213,7 @@ class _ClipRowState extends State<ClipRow> {
                     const PopupMenuItem(
                       key: Key('newGroupOption'),
                       value: _newGroup,
-                      child: Text('New group...'),
+                      child: Text('New group…'),
                     ),
                     if (clip.groupId != null)
                       const PopupMenuItem(

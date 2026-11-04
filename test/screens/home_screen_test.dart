@@ -400,6 +400,7 @@ void main() {
     final id = p.clips.last.id;
     await tapKey(t, 'group-$id');
     await t.pumpAndSettle();
+    expect(find.text('New group…'), findsOneWidget);
     await tapKey(t, 'newGroupOption');
     await t.pumpAndSettle();
     await t.enterText(find.byKey(const Key('groupNameInput')), 'Work');
@@ -505,5 +506,23 @@ void main() {
     await t.pump();
     await tapKey(t, 'group-item-${p.groups.single.id}');
     expect(find.text('No clips in this group'), findsOneWidget);
+  });
+
+  testWidgets('removing the filtered tag clears the filter', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() => p.addTag(id, 'Work'));
+    await t.pump();
+    await tapKey(t, 'tagFilter-Work');
+    await tapKey(t, 'tags-$id');
+    await t.tap(
+      find.descendant(
+        of: find.byKey(const Key('removeTag-Work')),
+        matching: find.byIcon(Icons.clear),
+      ),
+    );
+    await settle(t);
+    expect(p.tagFilter, isNull);
+    expect(p.clips.map((c) => c.id), [id]);
   });
 }

@@ -82,6 +82,12 @@ class ClipboardProvider extends ChangeNotifier {
     );
     _groups = await _db.listGroups();
     _tagsInUse = await _db.tagsInUse();
+    final f = _tagFilter;
+    if (f != null &&
+        !_tagsInUse.any((t) => t.toLowerCase() == f.toLowerCase())) {
+      _tagFilter = null; // the tag is gone; don't strand the user on a filter
+      await _reload();
+    }
   }
 
   Future<int> purgeExpiredTrash() async {
