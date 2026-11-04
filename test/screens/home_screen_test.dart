@@ -1,6 +1,7 @@
 import 'package:clipps/database/db_helper.dart';
 import 'package:clipps/models/clip_view.dart';
 import 'package:clipps/models/clip_source.dart';
+import 'package:clipps/models/clipboard_model.dart';
 import 'package:clipps/providers/clipboard_provider.dart';
 import 'package:clipps/screens/home_screen.dart';
 import 'package:flutter/material.dart';
@@ -49,7 +50,7 @@ void main() {
   }
 
   Future<void> confirmDelete(WidgetTester t) async {
-    await t.tap(find.text('Delete'));
+    await t.tap(find.text('Move to Trash').last);
     await settle(t);
     await t.pumpAndSettle();
   }
@@ -143,27 +144,28 @@ void main() {
     },
   );
 
-  testWidgets('select two clips, confirm Delete: both gone from list and DB', (
-    t,
-  ) async {
-    await show(t, clips: ['a', 'b', 'c']);
-    final ids = p.clips.map((c) => c.id).toList(); // c, b, a
-    await t.tap(find.byKey(Key('select-${ids[0]}')));
-    await t.tap(find.byKey(Key('select-${ids[1]}')));
-    await t.pump();
-    await t.tap(find.byKey(const Key('deleteSelected')));
-    await t.pumpAndSettle();
-    expect(find.text('Delete 2 clip(s)?'), findsOneWidget);
-    expect(find.text('This permanently removes them.'), findsOneWidget);
-    await confirmDelete(t);
-    expect(find.byKey(Key('clip-${ids[0]}')), findsNothing);
-    expect(find.byKey(Key('clip-${ids[1]}')), findsNothing);
-    expect(find.byKey(Key('clip-${ids[2]}')), findsOneWidget);
-    final left = await t.runAsync(db.getClips);
-    expect(left!.map((c) => c.content), ['a']);
-    final trash = await t.runAsync(() => db.getClips(view: ClipView.trash));
-    expect(trash!.length, 2);
-  });
+  testWidgets(
+    'select two clips, confirm Move to Trash: both gone from list and DB',
+    (t) async {
+      await show(t, clips: ['a', 'b', 'c']);
+      final ids = p.clips.map((c) => c.id).toList(); // c, b, a
+      await t.tap(find.byKey(Key('select-${ids[0]}')));
+      await t.tap(find.byKey(Key('select-${ids[1]}')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('deleteSelected')));
+      await t.pumpAndSettle();
+      expect(find.text('Move 2 clip(s) to Trash?'), findsOneWidget);
+      expect(find.text('You can restore them for 15 days.'), findsOneWidget);
+      await confirmDelete(t);
+      expect(find.byKey(Key('clip-${ids[0]}')), findsNothing);
+      expect(find.byKey(Key('clip-${ids[1]}')), findsNothing);
+      expect(find.byKey(Key('clip-${ids[2]}')), findsOneWidget);
+      final left = await t.runAsync(db.getClips);
+      expect(left!.map((c) => c.content), ['a']);
+      final trash = await t.runAsync(() => db.getClips(view: ClipView.trash));
+      expect(trash!.length, 2);
+    },
+  );
 
   testWidgets('deleteSelected is disabled with nothing selected', (t) async {
     await show(t, clips: ['a']);
@@ -173,7 +175,7 @@ void main() {
     );
   });
 
-  testWidgets('Cancel in delete dialog keeps clips', (t) async {
+  testWidgets('Cancel in Trash dialog keeps clips', (t) async {
     await show(t, clips: ['a']);
     await t.tap(find.byKey(Key('select-${p.clips.first.id}')));
     await t.pump();
@@ -192,7 +194,7 @@ void main() {
     final bId = p.clips.first.id;
     await t.tap(find.byKey(Key('delete-$bId')));
     await t.pumpAndSettle();
-    expect(find.text('Delete 1 clip(s)?'), findsOneWidget);
+    expect(find.text('Move 1 clip(s) to Trash?'), findsOneWidget);
     await confirmDelete(t);
     expect(find.text('b'), findsNothing);
     expect(find.text('a'), findsOneWidget);
@@ -230,16 +232,20 @@ void main() {
       source: const ClipSource(app: 'Google Chrome', title: 'Inbox'),
     );
     await show(t);
-    expect(find.textContaining('· Google Chrome — Inbox'), findsOneWidget);
+    expect(find.textContaining('Google Chrome — Inbox'), findsOneWidget);
   });
 
-  testWidgets('subtitle shows only timestamp without source', (t) async {
+  testWidgets('meta shows relative time without source', (t) async {
     await show(t, clips: ['a']);
-    final sub =
-        t.widget<ListTile>(find.byKey(Key('clip-${p.clips.first.id}'))).subtitle
-            as Text;
-    expect(sub.data, isNot(contains('·')));
-    expect(sub.data!.length, 19);
+    final row = find.byKey(Key('clip-${p.clips.first.id}'));
+    expect(
+      find.descendant(of: row, matching: find.text('just now')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.textContaining('·')),
+      findsNothing,
+    );
   });
 
   testWidgets('pin moves row to top and disables checkbox and delete', (
@@ -293,6 +299,87 @@ void main() {
     expect(
       find.text('Shortcut Ctrl+Alt+. is already used by another app'),
       findsOneWidget,
+    );
+  });
+
+  Future<void> openView(WidgetTester t, String key) async {
+    await t.tap(find.byKey(Key(key)));
+    await settle(t);
+  }
+
+  testWidgets('delete moves clip to Trash, shown with days left', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.tap(find.byKey(Key('delete-$id')));
+    await t.pumpAndSettle();
+    await confirmDelete(t);
+    expect(find.text('No clips yet'), findsOneWidget);
+    await openView(t, 'view-trash');
+    expect(find.text('a'), findsOneWidget);
+    expect(find.textContaining('removed in 15 days'), findsOneWidget);
+    expect(find.byKey(Key('select-$id')), findsNothing);
+    expect(find.byKey(Key('pin-$id')), findsNothing);
+    expect(find.byKey(Key('delete-$id')), findsNothing);
+  });
+
+  testWidgets('restore returns the clip to All clips', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() => p.trashClip(id));
+    await t.pump();
+    await openView(t, 'view-trash');
+    await tapKey(t, 'restore-$id');
+    expect(find.text('Trash is empty'), findsOneWidget);
+    await openView(t, 'view-all');
+    expect(find.text('a'), findsOneWidget);
+  });
+
+  testWidgets('secret clip is masked until revealed', (t) async {
+    const key = 'sk-AbCdEfGhIjKlMnOpQrStUvWxYz123456';
+    await show(t, clips: [key]);
+    final id = p.clips.first.id;
+    expect(p.clips.first.isSecret, isTrue);
+    expect(find.textContaining(key), findsNothing);
+    expect(find.text('sk-A••••••••'), findsOneWidget);
+    await t.tap(find.byKey(Key('reveal-$id')));
+    await t.pump();
+    expect(find.text(key), findsOneWidget);
+  });
+
+  testWidgets('selection shows "N selected" and clearSelection clears it', (
+    t,
+  ) async {
+    await show(t, clips: ['a', 'b']);
+    expect(find.byKey(const Key('clearSelection')), findsNothing);
+    await t.tap(find.byKey(Key('select-${p.clips.first.id}')));
+    await t.pump();
+    expect(find.text('1 selected'), findsOneWidget);
+    await t.tap(find.byKey(const Key('clearSelection')));
+    await t.pump();
+    expect(find.text('1 selected'), findsNothing);
+    expect(p.selectedIds, isEmpty);
+  });
+
+  testWidgets('empty states per view', (t) async {
+    await show(t);
+    expect(find.text('No clips yet'), findsOneWidget);
+    await openView(t, 'view-tasks');
+    expect(find.text('No tasks yet'), findsOneWidget);
+    await openView(t, 'view-trash');
+    expect(find.text('Trash is empty'), findsOneWidget);
+  });
+
+  testWidgets('tasks view checkbox marks done and strikes through', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() => p.makeTask(id));
+    await t.pump();
+    await openView(t, 'view-tasks');
+    await tapKey(t, 'taskDone-$id');
+    expect(p.clips.first.taskState, TaskState.done);
+    expect(
+      t.widget<Text>(find.text('a')).style?.decoration,
+      TextDecoration.lineThrough,
     );
   });
 }

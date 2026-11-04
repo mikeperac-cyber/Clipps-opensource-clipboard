@@ -33,6 +33,8 @@ class ClipboardProvider extends ChangeNotifier {
   List<String> _tagsInUse = [];
   Timer? _retentionTimer;
 
+  DateTime now() => _clock();
+
   ClipView get view => _view;
   int? get groupId => _groupId;
   String? get tagFilter => _tagFilter;

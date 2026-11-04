@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../models/clip_view.dart';
 import '../providers/clipboard_provider.dart';
+import 'clip_row.dart';
+import 'format.dart';
+import 'sidebar.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -12,174 +15,152 @@ class HomeScreen extends StatelessWidget {
     final p = context.watch<ClipboardProvider>();
     final range = p.dateRange;
     final filtered = p.searchText.isNotEmpty || range != null;
+    final selected = p.selectedIds;
+    final trash = p.view == ClipView.trash;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Clipps'),
+        title: Text(
+          selected.isEmpty ? 'Clipps' : '${selected.length} selected',
+        ),
         actions: [
+          if (selected.isNotEmpty)
+            IconButton(
+              key: const Key('clearSelection'),
+              icon: const Icon(Icons.close),
+              tooltip: 'Clear selection',
+              onPressed: p.clearSelection,
+            ),
           IconButton(
             key: const Key('deleteSelected'),
-            icon: const Icon(Icons.delete),
-            tooltip: 'Delete selected',
-            onPressed: p.selectedIds.isEmpty
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Move to Trash',
+            onPressed: selected.isEmpty
                 ? null
-                : () => _confirmDelete(
+                : () => confirmTrash(
                     context,
-                    p.selectedIds.length,
+                    selected.length,
                   ).then((ok) => ok ? p.trashSelected() : null),
           ),
         ],
       ),
-      body: Column(
+      body: Row(
         children: [
-          if (p.hotkeyUnavailable)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-              child: Text(
-                'Shortcut Ctrl+Alt+. is already used by another app',
-                key: const Key('hotkeyWarning'),
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+          const Sidebar(),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: Column(
+                  children: [
+                    if (p.hotkeyUnavailable)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                        child: Text(
+                          'Shortcut Ctrl+Alt+. is already used by another app',
+                          key: const Key('hotkeyWarning'),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    if (!trash) const _ManualInput(),
+                    _searchRow(context, p, range),
+                    Expanded(child: _list(p, filtered)),
+                  ],
+                ),
               ),
             ),
-          const _ManualInput(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _SearchField(
-                    focusRequests: p.searchFocusRequests,
-                    onChanged: p.setSearchText,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  key: const Key('dateRange'),
-                  icon: const Icon(Icons.date_range),
-                  label: Text(
-                    range == null
-                        ? 'Any date'
-                        : '${_day(range.start)} - ${_day(range.end)}',
-                  ),
-                  onPressed: () async {
-                    final picked = await showDateRangePicker(
-                      context: context,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime.now().add(const Duration(days: 1)),
-                      initialDateRange: range,
-                    );
-                    if (picked != null) await p.setDateRange(picked);
-                  },
-                ),
-                if (range != null)
-                  IconButton(
-                    key: const Key('clearDateRange'),
-                    tooltip: 'Clear date range',
-                    icon: const Icon(Icons.clear),
-                    onPressed: () => p.setDateRange(null),
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: p.clips.isEmpty
-                ? Center(
-                    child: Text(filtered ? 'No clips match' : 'No clips yet'),
-                  )
-                : ListView.builder(
-                    itemCount: p.clips.length,
-                    itemBuilder: (context, i) {
-                      final clip = p.clips[i];
-                      final pinned = clip.pinned;
-                      final label = clip.sourceLabel;
-                      return ListTile(
-                        key: Key('clip-${clip.id}'),
-                        tileColor: pinned
-                            ? Theme.of(context).colorScheme.secondaryContainer
-                                  .withValues(alpha: 0.35)
-                            : null,
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: clip.content));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Copied')),
-                          );
-                        },
-                        leading: Checkbox(
-                          key: Key('select-${clip.id}'),
-                          value: p.selectedIds.contains(clip.id),
-                          onChanged: pinned
-                              ? null
-                              : (_) => p.toggleSelected(clip.id),
-                        ),
-                        title: Text(
-                          clip.preview,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          clip.createdAt.toLocal().toString().substring(0, 19) +
-                              (label == null ? '' : ' · $label'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              key: Key('pin-${clip.id}'),
-                              tooltip: pinned ? 'Unpin' : 'Pin',
-                              icon: Icon(
-                                pinned
-                                    ? Icons.push_pin
-                                    : Icons.push_pin_outlined,
-                              ),
-                              onPressed: () => p.togglePin(clip.id),
-                            ),
-                            IconButton(
-                              key: Key('delete-${clip.id}'),
-                              tooltip: pinned
-                                  ? 'Unpin to delete'
-                                  : 'Delete clip',
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: pinned
-                                  ? null
-                                  : () => _confirmDelete(context, 1).then(
-                                      (ok) => ok ? p.trashClip(clip.id) : null,
-                                    ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
           ),
         ],
       ),
     );
   }
-}
 
-String _day(DateTime d) => d.toString().substring(0, 10);
-
-Future<bool> _confirmDelete(BuildContext context, int count) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text('Delete $count clip(s)?'),
-      content: const Text('This permanently removes them.'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancel'),
+  Widget _searchRow(
+    BuildContext context,
+    ClipboardProvider p,
+    DateTimeRange? range,
+  ) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: _SearchField(
+            focusRequests: p.searchFocusRequests,
+            onChanged: p.setSearchText,
+          ),
         ),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Delete'),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          key: const Key('dateRange'),
+          icon: const Icon(Icons.date_range),
+          label: Text(
+            range == null
+                ? 'Any date'
+                : '${dayString(range.start)} - ${dayString(range.end)}',
+          ),
+          onPressed: () async {
+            final picked = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2000),
+              lastDate: p.now().add(const Duration(days: 1)),
+              initialDateRange: range,
+            );
+            if (picked != null) await p.setDateRange(picked);
+          },
         ),
+        if (range != null)
+          IconButton(
+            key: const Key('clearDateRange'),
+            tooltip: 'Clear date range',
+            icon: const Icon(Icons.clear),
+            onPressed: () => p.setDateRange(null),
+          ),
       ],
     ),
   );
-  return ok ?? false;
+
+  Widget _list(ClipboardProvider p, bool filtered) {
+    if (p.clips.isEmpty) {
+      final (icon, text) = filtered
+          ? (Icons.search_off, 'No clips match')
+          : switch (p.view) {
+              ClipView.tasks => (Icons.checklist, 'No tasks yet'),
+              ClipView.trash => (Icons.delete_outline, 'Trash is empty'),
+              ClipView.all =>
+                p.groupId != null
+                    ? (Icons.folder_open, 'No clips in this group')
+                    : (Icons.content_paste, 'No clips yet'),
+            };
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40, color: Colors.grey),
+            const SizedBox(height: 8),
+            Text(text),
+          ],
+        ),
+      );
+    }
+    final now = p.now();
+    return ListView.builder(
+      itemCount: p.clips.length,
+      itemBuilder: (context, i) {
+        final clip = p.clips[i];
+        return ClipRow(
+          key: ValueKey(clip.id),
+          clip: clip,
+          view: p.view,
+          selected: p.selectedIds.contains(clip.id),
+          now: now,
+        );
+      },
+    );
+  }
 }
 
 class _ManualInput extends StatefulWidget {

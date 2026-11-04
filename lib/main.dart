@@ -14,8 +14,22 @@ class ClippsApp extends StatelessWidget {
   const ClippsApp({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      const MaterialApp(title: 'Clipps', home: HomeScreen());
+  Widget build(BuildContext context) {
+    ThemeData theme(Brightness b) => ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF5B5BD6),
+        brightness: b,
+      ),
+    );
+    return MaterialApp(
+      title: 'Clipps',
+      theme: theme(Brightness.light),
+      darkTheme: theme(Brightness.dark),
+      themeMode: ThemeMode.system,
+      home: const HomeScreen(),
+    );
+  }
 }
 
 Widget _errorApp(Object error, StackTrace stack) {
