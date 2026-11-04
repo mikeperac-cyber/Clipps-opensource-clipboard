@@ -2,7 +2,7 @@
 ; Expects a fresh `flutter build windows` (Release) in build\windows\x64\runner\Release.
 
 #define AppName "Clipps"
-#define AppVersion "2.0.0"
+#define AppVersion "3.0.0"
 #define ReleaseDir "..\build\windows\x64\runner\Release"
 
 [Setup]
