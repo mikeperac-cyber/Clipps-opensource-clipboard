@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../models/clip_group.dart';
 import '../models/clip_source.dart';
 import '../models/clip_view.dart';
 import '../models/clipboard_model.dart';
@@ -207,6 +208,109 @@ class DbHelper {
       whereArgs: ids.toList(),
     );
   }
+
+  static String _marks(Iterable<Object?> xs) =>
+      List.filled(xs.length, '?').join(',');
+
+  /// Moves unpinned live clips to the trash. Returns how many moved.
+  Future<int> trashClips(Iterable<int> ids, DateTime now) async {
+    if (ids.isEmpty) return 0;
+    return _db.rawUpdate(
+      'UPDATE clips SET deleted_at = ? WHERE id IN (${_marks(ids)}) '
+      'AND pinned = 0 AND deleted_at IS NULL',
+      [now.millisecondsSinceEpoch, ...ids],
+    );
+  }
+
+  Future<int> restoreClips(Iterable<int> ids) async {
+    if (ids.isEmpty) return 0;
+    return _db.rawUpdate(
+      'UPDATE clips SET deleted_at = NULL WHERE id IN (${_marks(ids)}) '
+      'AND deleted_at IS NOT NULL',
+      ids.toList(),
+    );
+  }
+
+  /// The app's ONLY permanent delete: trashed rows strictly older than [cutoff].
+  Future<int> purgeTrashedBefore(DateTime cutoff) => _db.delete(
+    'clips',
+    where: 'deleted_at IS NOT NULL AND deleted_at < ?',
+    whereArgs: [cutoff.millisecondsSinceEpoch],
+  );
+
+  Future<void> setTaskState(int id, TaskState state) => _db.update(
+    'clips',
+    {
+      'task_state': switch (state) {
+        TaskState.none => null,
+        TaskState.open => 0,
+        TaskState.done => 1,
+      },
+    },
+    where: 'id = ?',
+    whereArgs: [id],
+  );
+
+  Future<List<ClipGroup>> listGroups() async {
+    final rows = await _db.query('groups', orderBy: 'name COLLATE NOCASE');
+    return [
+      for (final r in rows)
+        ClipGroup(id: r['id'] as int, name: r['name'] as String),
+    ];
+  }
+
+  /// Throws [DatabaseException] if the name exists (ignoring case).
+  Future<ClipGroup> createGroup(String name) async =>
+      ClipGroup(id: await _db.insert('groups', {'name': name}), name: name);
+
+  Future<void> renameGroup(int id, String name) =>
+      _db.update('groups', {'name': name}, where: 'id = ?', whereArgs: [id]);
+
+  Future<void> deleteGroup(int id) =>
+      _db.delete('groups', where: 'id = ?', whereArgs: [id]);
+
+  Future<void> setClipGroup(int clipId, int? groupId) => _db.update(
+    'clips',
+    {'group_id': groupId},
+    where: 'id = ?',
+    whereArgs: [clipId],
+  );
+
+  Future<void> addTag(int clipId, String tag) async {
+    // U+001F is the group_concat separator on read.
+    if (tag.contains('')) throw ArgumentError.value(tag, 'tag');
+    await _db.insert('clip_tags', {
+      'clip_id': clipId,
+      'tag': tag,
+      'auto': 0,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> removeTag(int clipId, String tag) => _db.delete(
+    'clip_tags',
+    where: 'clip_id = ? AND tag = ?',
+    whereArgs: [clipId, tag],
+  );
+
+  /// Tags on live clips: [kAutoTags] order first, then the rest A-Z.
+  Future<List<String>> tagsInUse() async {
+    final rows = await _db.rawQuery(
+      'SELECT DISTINCT tag FROM clip_tags JOIN clips ON clips.id = clip_id '
+      'WHERE deleted_at IS NULL',
+    );
+    final tags = [for (final r in rows) r['tag'] as String];
+    int rank(String t) {
+      final i = kAutoTags.indexOf(t);
+      return i < 0 ? kAutoTags.length : i;
+    }
+
+    return tags..sort((a, b) {
+      final c = rank(a).compareTo(rank(b));
+      return c != 0 ? c : a.toLowerCase().compareTo(b.toLowerCase());
+    });
+  }
+
+  Future<void> backupTo(String path) => _db.rawQuery('VACUUM INTO ?', [path]);
 
   Future<void> close() => _db.close();
 }

@@ -341,4 +341,120 @@ void main() {
     expect((await db.getClips()).single.content.length, big.length);
     expect(c.id, greaterThan(0));
   });
+
+  group('v3 mutations', () {
+    final t0 = DateTime(2026, 6, 1);
+    const fifteen = Duration(days: 15);
+
+    test('trashClips skips pinned and returns count', () async {
+      final a = await db.insertClip('a', t0);
+      final b = await db.insertClip('b', t0);
+      await db.setPinned(b.id, true);
+      expect(await db.trashClips([a.id, b.id], t0), 1);
+      expect(await db.trashClips([], t0), 0);
+      expect((await db.getClips()).map((c) => c.id), [b.id]);
+      expect((await db.getClips(view: ClipView.trash)).single.id, a.id);
+    });
+
+    test('restoreClips brings clips back to all', () async {
+      final a = await db.insertClip('a', t0);
+      await db.trashClips([a.id], t0);
+      expect(await db.restoreClips([a.id]), 1);
+      expect((await db.getClips()).single.id, a.id);
+    });
+
+    test('purgeTrashedBefore boundary', () async {
+      final a = await db.insertClip('a', t0);
+      final b = await db.insertClip('b', t0);
+      final live = await db.insertClip('live', t0);
+      await db.trashClips([
+        a.id,
+      ], t0.subtract(fifteen - const Duration(hours: 1)));
+      await db.trashClips([
+        b.id,
+      ], t0.subtract(fifteen + const Duration(milliseconds: 1)));
+      expect(await db.purgeTrashedBefore(t0.subtract(fifteen)), 1);
+      expect((await db.getClips(view: ClipView.trash)).single.id, a.id);
+      expect((await db.getClips()).single.id, live.id);
+    });
+
+    test('purge cascades clip_tags', () async {
+      final a = await db.insertClip('https://x.com', t0);
+      await db.addTag(a.id, 'work');
+      await db.trashClips([a.id], t0);
+      await db.purgeTrashedBefore(t0.add(const Duration(days: 1)));
+      expect(await db.rawDb.query('clip_tags'), isEmpty);
+    });
+
+    test('setTaskState round-trips', () async {
+      final a = await db.insertClip('a', t0);
+      for (final s in [TaskState.open, TaskState.done, TaskState.none]) {
+        await db.setTaskState(a.id, s);
+        expect((await db.getClips()).single.taskState, s);
+      }
+    });
+
+    test('group names are unique ignoring case', () async {
+      await db.createGroup('Work');
+      await expectLater(
+        db.createGroup('work'),
+        throwsA(isA<DatabaseException>()),
+      );
+      await db.createGroup('alpha');
+      expect((await db.listGroups()).map((g) => g.name), ['alpha', 'Work']);
+    });
+
+    test('renameGroup renames', () async {
+      final g = await db.createGroup('Old');
+      await db.renameGroup(g.id, 'New');
+      expect((await db.listGroups()).single.name, 'New');
+    });
+
+    test('deleteGroup keeps clips', () async {
+      final g = await db.createGroup('Work');
+      final a = await db.insertClip('a', t0);
+      await db.setClipGroup(a.id, g.id);
+      expect((await db.getClips(groupId: g.id)).single.id, a.id);
+      await db.deleteGroup(g.id);
+      final got = (await db.getClips()).single;
+      expect(got.groupId, isNull);
+      expect(await db.listGroups(), isEmpty);
+    });
+
+    test('addTag/removeTag and tagsInUse ignores trashed clips', () async {
+      final a = await db.insertClip('see https://x.com', t0);
+      final b = await db.insertClip('b', t0);
+      await db.addTag(a.id, 'zed');
+      await db.addTag(a.id, 'Zed'); // duplicate ignoring case
+      await db.addTag(b.id, 'alpha');
+      expect(await db.tagsInUse(), ['Link', 'alpha', 'zed']);
+      await db.trashClips([b.id], t0);
+      expect(await db.tagsInUse(), ['Link', 'zed']);
+      await db.removeTag(a.id, 'ZED');
+      expect(await db.tagsInUse(), ['Link']);
+      expect((await db.getClips()).single.tags, ['Link']);
+    });
+
+    test('addTag rejects the separator character', () async {
+      final a = await db.insertClip('a', t0);
+      expect(() => db.addTag(a.id, 'x\u001Fy'), throwsArgumentError);
+    });
+
+    test('backupTo writes a readable copy', () async {
+      final dir = await Directory.systemTemp.createTemp('clipps_bak');
+      final src = await DbHelper.open(databaseFactoryFfi, '${dir.path}/src.db');
+      try {
+        await src.insertClip('a', t0);
+        await src.insertClip('b', t0);
+        final dest = '${dir.path}/copy.db';
+        await src.backupTo(dest);
+        final copy = await DbHelper.open(databaseFactoryFfi, dest);
+        expect((await copy.getClips()).length, 2);
+        await copy.close();
+      } finally {
+        await src.close();
+        await dir.delete(recursive: true);
+      }
+    });
+  });
 }
