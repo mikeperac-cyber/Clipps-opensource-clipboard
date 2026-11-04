@@ -308,11 +308,19 @@ void main() {
       'source_title': 'T',
     });
     await v2.insert('clips', {'content': 'https://a.b', 'created_at': 3});
+    await v2.insert('clips', {'content': '1' * 5000000, 'created_at': 4});
     await v2.close();
 
     final up = await DbHelper.open(databaseFactoryFfi, path);
     addTearDown(up.close);
     final got = await up.getClips();
+    expect(got.length, 4);
+    expect(
+      (await up.rawDb.rawQuery('PRAGMA journal_mode')).first.values.first,
+      'wal',
+    );
+    expect(got.where((c) => c.content.length == 5000000), hasLength(1));
+    got.removeWhere((c) => c.content.length == 5000000);
     expect(got.map((c) => c.content), ['one', 'https://a.b', 'two']);
     expect(got.first.pinned, isTrue);
     expect(got.last.sourceApp, 'App');
@@ -323,7 +331,14 @@ void main() {
     expect(got[1].tags, ['Link']);
     expect(got[0].tags, isEmpty);
     expect(got[2].tags, isEmpty);
-    final auto = await up.rawDb.query('clip_tags');
+    final auto = await up.rawDb.query('clip_tags', where: "tag = 'Link'");
     expect(auto.single['auto'], 1);
+  });
+
+  test('insertClip stores a 5M-digit clip', () async {
+    final big = '1' * 5000000;
+    final c = await db.insertClip(big, DateTime(2026));
+    expect((await db.getClips()).single.content.length, big.length);
+    expect(c.id, greaterThan(0));
   });
 }

@@ -40,6 +40,10 @@ void main() {
       'a x 1M': 'a' * 1000000,
       'a x 500k @ b x 500k': '${'a' * 500000}@${'b' * 500000}',
       'digits x 1M': '1' * 1000000,
+      'ones x 5M': '1' * 5000000,
+      'dashes x 5M': '-' * 5000000,
+      '1 x 5M': '1 ' * 2500000,
+      'eyJ + a x 5M': 'eyJ${'a' * 5000000}',
     };
     inputs.forEach((name, text) {
       test(name, () {
