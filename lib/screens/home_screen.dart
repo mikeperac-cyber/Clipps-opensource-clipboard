@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,14 +9,35 @@ import 'clip_row.dart';
 import 'format.dart';
 import 'sidebar.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // Showing the window from the tray doesn't notify Dart; keep times fresh.
+    _tick = Timer.periodic(const Duration(minutes: 1), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = context.watch<ClipboardProvider>();
     final range = p.dateRange;
-    final filtered = p.searchText.isNotEmpty || range != null;
+    final filtered =
+        p.searchText.isNotEmpty || range != null || p.tagFilter != null;
     final selected = p.selectedIds;
     final trash = p.view == ClipView.trash;
 
@@ -128,18 +151,22 @@ class HomeScreen extends StatelessWidget {
     alignment: Alignment.centerLeft,
     child: Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 4,
-        children: [
-          for (final t in p.tagsInUse)
-            FilterChip(
-              key: Key('tagFilter-$t'),
-              label: Text(t),
-              selected: p.tagFilter == t,
-              onSelected: (on) => p.setTagFilter(on ? t : null),
-            ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final t in p.tagsInUse)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: FilterChip(
+                  key: Key('tagFilter-$t'),
+                  label: Text(t),
+                  selected: p.tagFilter?.toLowerCase() == t.toLowerCase(),
+                  onSelected: (on) => p.setTagFilter(on ? t : null),
+                ),
+              ),
+          ],
+        ),
       ),
     ),
   );
@@ -286,7 +313,10 @@ class _SearchFieldState extends State<_SearchField> {
       key: const Key('search'),
       controller: _controller,
       focusNode: _focus,
-      decoration: const InputDecoration(hintText: 'Search clips'),
+      decoration: const InputDecoration(
+        hintText: 'Search clips',
+        prefixIcon: Icon(Icons.search),
+      ),
       onChanged: widget.onChanged,
     );
   }

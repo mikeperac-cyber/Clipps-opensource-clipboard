@@ -51,6 +51,7 @@ Widget _errorApp(Object error, StackTrace stack) {
 Future<Widget> buildApp(String dbPath) async {
   try {
     sqfliteFfiInit();
+    await DbHelper.backupBeforeUpgrade(databaseFactoryFfi, dbPath);
     final db = await DbHelper.open(databaseFactoryFfi, dbPath);
     final provider = ClipboardProvider(db);
     await provider.load();

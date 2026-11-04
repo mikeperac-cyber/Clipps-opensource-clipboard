@@ -525,4 +525,90 @@ void main() {
     expect(p.tagFilter, isNull);
     expect(p.clips.map((c) => c.id), [id]);
   });
+
+  testWidgets('relative times refresh every minute', (t) async {
+    var now = DateTime(2026, 1, 1, 10);
+    p = ClipboardProvider(db, clock: () => now);
+    await show(t, clips: ['a']);
+    expect(find.text('just now'), findsOneWidget);
+    now = now.add(const Duration(minutes: 5));
+    await t.pump(const Duration(minutes: 1));
+    expect(find.text('5 min ago'), findsOneWidget);
+  });
+
+  testWidgets('tag filter with no results says "No clips match"', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() => p.addTag(id, 'Work'));
+    await t.pump();
+    await tapKey(t, 'tagFilter-Work');
+    await openView(t, 'view-trash');
+    expect(find.text('No clips match'), findsOneWidget);
+  });
+
+  testWidgets('filter chip highlights regardless of case', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() async {
+      await p.addTag(id, 'Work');
+      await p.setTagFilter('work');
+    });
+    await t.pump();
+    final chip = t.widget<FilterChip>(find.byKey(const Key('tagFilter-Work')));
+    expect(chip.selected, isTrue);
+  });
+
+  testWidgets('tag editor keeps showing tags after clip is filtered out', (
+    t,
+  ) async {
+    await show(t, clips: ['a', 'b']);
+    final a = p.clips.firstWhere((c) => c.content == 'a').id;
+    final b = p.clips.firstWhere((c) => c.content == 'b').id;
+    await t.runAsync(() async {
+      for (final id in [a, b]) {
+        await p.addTag(id, 'Work');
+      }
+      await p.addTag(a, 'Extra');
+    });
+    await t.pump();
+    await tapKey(t, 'tagFilter-Work');
+    await tapKey(t, 'tags-$a');
+    await t.tap(
+      find.descendant(
+        of: find.byKey(const Key('removeTag-Work')),
+        matching: find.byIcon(Icons.clear),
+      ),
+    );
+    await settle(t);
+    expect(p.clips.map((c) => c.id), [b]);
+    expect(find.byKey(const Key('removeTag-Extra')), findsOneWidget);
+    expect(find.byKey(const Key('removeTag-Work')), findsNothing);
+  });
+
+  testWidgets('search field has a search icon', (t) async {
+    await show(t);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('search')),
+        matching: find.byIcon(Icons.search),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('200 tags in use do not overflow the chip row', (t) async {
+    t.view.physicalSize = const Size(800, 600);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() async {
+      for (var i = 0; i < 200; i++) {
+        await p.addTag(id, 'tag-number-$i');
+      }
+      await p.load();
+    });
+    await t.pump();
+    expect(t.takeException(), isNull);
+  });
 }

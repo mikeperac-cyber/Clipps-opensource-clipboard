@@ -1,17 +1,16 @@
-# clipps
+# Clipps
 
-A new Flutter project.
+Clipps is a Windows clipboard manager. It saves what you copy, lets you search it, and keeps it in groups, tags and tasks.
 
-## Getting Started
+## Where your data lives
 
-This project is a starting point for a Flutter application.
+- Clips: `%APPDATA%\Clipps\clipps\clipps.db`
+- Daily backups (newest 7): `%APPDATA%\Clipps\clipps\backups\`
+- A copy made once before the v3 upgrade: `backups\clipps-pre-v3.db`
 
-A few resources to get you started if this is your first Flutter project:
+## Restore from a backup
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. Quit Clipps from the tray icon (right-click, then Quit).
+2. In `%APPDATA%\Clipps\clipps\`, delete `clipps.db-wal` and `clipps.db-shm` if they exist.
+3. Copy `backups\clipps-YYYY-MM-DD.db` over `clipps.db`.
+4. Start Clipps.

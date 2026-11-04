@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/clip_group.dart';
@@ -46,20 +49,21 @@ class DbHelper {
           await _createTagTable(db);
         },
         onUpgrade: (db, oldVersion, _) async {
+          // Every step is safe to re-run: the v2 app resets user_version to 2
+          // when it opens a v3 file, so this can run on already-upgraded data.
           if (oldVersion < 2) {
-            await db.execute('ALTER TABLE clips ADD COLUMN source_app TEXT');
-            await db.execute('ALTER TABLE clips ADD COLUMN source_title TEXT');
-            await db.execute(
-              'ALTER TABLE clips ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0',
-            );
+            await _addColumn(db, 'source_app', 'TEXT');
+            await _addColumn(db, 'source_title', 'TEXT');
+            await _addColumn(db, 'pinned', 'INTEGER NOT NULL DEFAULT 0');
           }
           if (oldVersion < 3) {
             await _createGroups(db);
-            await db.execute('ALTER TABLE clips ADD COLUMN deleted_at INTEGER');
-            await db.execute('ALTER TABLE clips ADD COLUMN task_state INTEGER');
-            await db.execute(
-              'ALTER TABLE clips ADD COLUMN group_id INTEGER '
-              'REFERENCES groups(id) ON DELETE SET NULL',
+            await _addColumn(db, 'deleted_at', 'INTEGER');
+            await _addColumn(db, 'task_state', 'INTEGER');
+            await _addColumn(
+              db,
+              'group_id',
+              'INTEGER REFERENCES groups(id) ON DELETE SET NULL',
             );
             await _createTagTable(db);
             final rows = await db.query('clips', columns: ['id', 'content']);
@@ -70,7 +74,7 @@ class DbHelper {
                   'clip_id': r['id'],
                   'tag': t,
                   'auto': 1,
-                });
+                }, conflictAlgorithm: ConflictAlgorithm.ignore);
               }
             }
             await batch.commit(noResult: true);
@@ -81,21 +85,57 @@ class DbHelper {
     return DbHelper._(db);
   }
 
+  static Future<void> _addColumn(Database db, String name, String ddl) async {
+    final cols = await db.rawQuery('PRAGMA table_info(clips)');
+    if (cols.any((c) => c['name'] == name)) return;
+    await db.execute('ALTER TABLE clips ADD COLUMN $name $ddl');
+  }
+
+  /// Copies a pre-v3 database (and WAL files) to backups/clipps-pre-v3.db once.
+  /// Never throws: a failed copy must not block startup.
+  static Future<void> backupBeforeUpgrade(
+    DatabaseFactory factory,
+    String path,
+  ) async {
+    try {
+      final dir = Directory(p.join(p.dirname(path), 'backups'));
+      final dest = p.join(dir.path, 'clipps-pre-v3.db');
+      if (!File(path).existsSync() || File(dest).existsSync()) return;
+      final probe = await factory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      final version = await probe.getVersion();
+      await probe.close();
+      if (version >= 3) return;
+      await dir.create(recursive: true);
+      // Sidecars first, main file last: its existence marks the copy as done.
+      for (final suffix in ['-wal', '-shm', '']) {
+        final src = File('$path$suffix');
+        if (src.existsSync()) await src.copy('$dest$suffix');
+      }
+    } catch (e, s) {
+      debugPrint('Clipps pre-v3 backup failed: $e\n$s');
+    }
+  }
+
   static Future<void> _createGroups(Database db) => db.execute(
-    'CREATE TABLE groups('
+    'CREATE TABLE IF NOT EXISTS groups('
     'id INTEGER PRIMARY KEY AUTOINCREMENT, '
     'name TEXT NOT NULL UNIQUE COLLATE NOCASE)',
   );
 
   static Future<void> _createTagTable(Database db) async {
     await db.execute(
-      'CREATE TABLE clip_tags('
+      'CREATE TABLE IF NOT EXISTS clip_tags('
       'clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE, '
       'tag TEXT NOT NULL COLLATE NOCASE, '
       'auto INTEGER NOT NULL DEFAULT 0, '
       'PRIMARY KEY (clip_id, tag))',
     );
-    await db.execute('CREATE INDEX idx_clip_tags_tag ON clip_tags(tag)');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_clip_tags_tag ON clip_tags(tag)',
+    );
   }
 
   Future<ClipboardModel> insertClip(
@@ -222,11 +262,18 @@ class DbHelper {
   }
 
   /// The app's ONLY permanent delete: trashed rows strictly older than [cutoff].
-  Future<int> purgeTrashedBefore(DateTime cutoff) => _db.delete(
-    'clips',
-    where: 'deleted_at IS NOT NULL AND deleted_at < ?',
-    whereArgs: [cutoff.millisecondsSinceEpoch],
-  );
+  Future<int> purgeTrashedBefore(DateTime cutoff) async {
+    final n = await _db.delete(
+      'clips',
+      where: 'deleted_at IS NOT NULL AND deleted_at < ?',
+      whereArgs: [cutoff.millisecondsSinceEpoch],
+    );
+    // Purged text must not linger in the -wal file.
+    if (n > 0) await checkpoint();
+    return n;
+  }
+
+  Future<void> checkpoint() => _db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
 
   Future<void> setTaskState(int id, TaskState state) => _db.update(
     'clips',

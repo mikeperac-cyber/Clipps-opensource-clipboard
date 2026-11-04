@@ -1,5 +1,8 @@
 const kAutoTags = ['Link', 'Email', 'Phone', 'Number', 'Code', 'Secret'];
 
+// Email and Code look only at this prefix, to keep MB-sized clips fast.
+const _scanLimit = 65536;
+
 final _link = RegExp(r'https?://\S');
 final _email = RegExp(r'[\w.+-]{1,64}@[\w-]{1,63}(\.[\w-]{1,63})+');
 // Negated classes, searched: `+` loops overflow the regex stack on MB-sized text.
@@ -8,6 +11,20 @@ final _notNumber = RegExp(r'[^\d.,\s]');
 final _codeLine = RegExp(
   r'^\s*(def |function |class |import |#include|const |let |var |public |private )',
 );
+// Cheap literal pre-check: the regex alone costs ~300ms on a 4 MB clip.
+const _keyHints = [
+  'sk-',
+  'sk_live_',
+  'ghp_',
+  'gho_',
+  'github_pat_',
+  'xoxb-',
+  'xoxp-',
+  'AKIA',
+  'AIza',
+  'eyJ',
+];
+
 final _keyPrefix = RegExp(
   r'(?<![\w-])(sk-|sk_live_|ghp_|gho_|github_pat_|xoxb-|xoxp-)\S'
   r'|(?<![\w-])AKIA[A-Z0-9]{16}'
@@ -41,14 +58,15 @@ List<String> _detect(String text) {
   final numBody = t.startsWith('+') || t.startsWith('-') ? t.substring(1) : t;
   final number =
       numBody.isNotEmpty && !_notNumber.hasMatch(numBody) && _digits(t) > 0;
-  final lines = t.split('\n');
+  final head = t.length > _scanLimit ? t.substring(0, _scanLimit) : t;
+  final lines = head.split('\n');
   final code =
       lines.length >= 2 &&
       (lines.where((l) => RegExp(r'[;{})]$').hasMatch(l.trimRight())).length >=
               2 ||
           lines.any(_codeLine.hasMatch));
   final secret =
-      _keyPrefix.hasMatch(t) ||
+      (_keyHints.any(t.contains) && _keyPrefix.hasMatch(t)) ||
       (!link &&
           t.length >= 32 &&
           !_notToken.hasMatch(t) &&
@@ -57,7 +75,7 @@ List<String> _detect(String text) {
           t.contains(RegExp(r'\d')));
   return [
     if (link) 'Link',
-    if (t.contains('@') && _email.hasMatch(t)) 'Email',
+    if (head.contains('@') && _email.hasMatch(head)) 'Email',
     if (phone) 'Phone',
     if (!phone && number) 'Number',
     if (code) 'Code',

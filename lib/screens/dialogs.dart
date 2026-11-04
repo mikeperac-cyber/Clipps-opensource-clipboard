@@ -90,6 +90,8 @@ class _TagEditor extends StatefulWidget {
 class _TagEditorState extends State<_TagEditor> {
   final _c = TextEditingController();
   bool _bad = false;
+  // Last tags seen: the clip may leave p.clips (e.g. filtered out) while open.
+  List<String> _tags = const [];
 
   @override
   void dispose() {
@@ -98,21 +100,27 @@ class _TagEditorState extends State<_TagEditor> {
   }
 
   Future<void> _add() async {
+    final text = _c.text.trim();
     final ok = await context.read<ClipboardProvider>().addTag(
       widget.clipId,
       _c.text,
     );
     if (!mounted) return;
-    setState(() => _bad = !ok);
+    setState(() {
+      _bad = !ok;
+      if (ok && !_tags.any((x) => x.toLowerCase() == text.toLowerCase())) {
+        _tags = [..._tags, text];
+      }
+    });
     if (ok) _c.clear();
   }
 
   @override
   Widget build(BuildContext context) {
     final p = context.watch<ClipboardProvider>();
-    final tags =
-        p.clips.where((c) => c.id == widget.clipId).firstOrNull?.tags ??
-        const <String>[];
+    final clip = p.clips.where((c) => c.id == widget.clipId).firstOrNull;
+    if (clip != null) _tags = clip.tags;
+    final tags = _tags;
     return AlertDialog(
       title: const Text('Edit tags'),
       content: SizedBox(
@@ -128,7 +136,17 @@ class _TagEditorState extends State<_TagEditor> {
                   InputChip(
                     key: Key('removeTag-$t'),
                     label: Text(t),
-                    onDeleted: () => p.removeTag(widget.clipId, t),
+                    onDeleted: () async {
+                      await p.removeTag(widget.clipId, t);
+                      if (mounted) {
+                        setState(
+                          () => _tags = [
+                            for (final x in _tags)
+                              if (x != t) x,
+                          ],
+                        );
+                      }
+                    },
                   ),
               ],
             ),

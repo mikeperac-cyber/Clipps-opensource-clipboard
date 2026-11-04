@@ -5,6 +5,7 @@ import 'package:clipps/models/clip_source.dart';
 import 'package:clipps/models/clip_view.dart';
 import 'package:clipps/models/clipboard_model.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -433,6 +434,96 @@ void main() {
         await src.close();
         await dir.delete(recursive: true);
       }
+    });
+  });
+
+  group('file-backed upgrade safety', () {
+    late Directory dir;
+    late String path;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('clipps_db_');
+      path = p.join(dir.path, 'clipps.db');
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    Future<void> makeV2() async {
+      final raw = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: (d, _) => d.execute(
+            'CREATE TABLE clips(id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'content TEXT NOT NULL, created_at INTEGER NOT NULL, '
+            'source_app TEXT, source_title TEXT, '
+            'pinned INTEGER NOT NULL DEFAULT 0)',
+          ),
+        ),
+      );
+      await raw.insert('clips', {'content': 'v2 clip', 'created_at': 1});
+      await raw.close();
+    }
+
+    test('v3 -> v2 app -> v3 again keeps everything', () async {
+      var h = await DbHelper.open(databaseFactoryFfi, path);
+      final a = await h.insertClip('keep me a@b.co', DateTime(2026));
+      await h.insertClip('other', DateTime(2026, 1, 2));
+      await h.setPinned(a.id, true);
+      await h.addTag(a.id, 'Work');
+      final g = await h.createGroup('G');
+      await h.setClipGroup(a.id, g.id);
+      await h.close();
+
+      final v2 = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onDowngrade: (db, o, n) async {},
+        ),
+      );
+      expect(await v2.getVersion(), 2);
+      await v2.close();
+
+      h = await DbHelper.open(databaseFactoryFfi, path);
+      final clips = await h.getClips();
+      expect(clips.length, 2);
+      final got = clips.firstWhere((c) => c.id == a.id);
+      expect(got.pinned, isTrue);
+      expect(got.tags, containsAll(['Email', 'Work']));
+      expect((await h.listGroups()).single.name, 'G');
+      final row = await h.rawDb.query(
+        'clips',
+        where: 'id=?',
+        whereArgs: [a.id],
+      );
+      expect(row.single['group_id'], g.id);
+      await h.close();
+    });
+
+    test('backupBeforeUpgrade copies a v2 file once, skips v3', () async {
+      await makeV2();
+      final dest = p.join(dir.path, 'backups', 'clipps-pre-v3.db');
+      await DbHelper.backupBeforeUpgrade(databaseFactoryFfi, path);
+      expect(File(dest).existsSync(), isTrue);
+      File(dest).writeAsStringSync('marker');
+      await DbHelper.backupBeforeUpgrade(databaseFactoryFfi, path);
+      expect(File(dest).readAsStringSync(), 'marker');
+
+      // The upgraded file is v3 now: no new safety copy.
+      File(dest).deleteSync();
+      final h = await DbHelper.open(databaseFactoryFfi, path);
+      await h.close();
+      await DbHelper.backupBeforeUpgrade(databaseFactoryFfi, path);
+      expect(File(dest).existsSync(), isFalse);
+    });
+
+    test('purge + checkpoint runs on a file DB', () async {
+      final h = await DbHelper.open(databaseFactoryFfi, path);
+      final c = await h.insertClip('gone', DateTime(2026));
+      await h.trashClips([c.id], DateTime(2026));
+      expect(await h.purgeTrashedBefore(DateTime(2027)), 1);
+      await h.checkpoint();
+      expect(await h.getClips(view: ClipView.trash), isEmpty);
+      await h.close();
     });
   });
 }

@@ -55,4 +55,12 @@ void main() {
       });
     });
   });
+
+  test('a 4.2M-char clip is tagged fast; Email only checks the first 64K', () {
+    final big = '${'x' * 4200000} a@b.co';
+    final sw = Stopwatch()..start();
+    final tags = detectTags(big);
+    expect(sw.elapsedMilliseconds, lessThan(300));
+    expect(tags, isNot(contains('Email')));
+  });
 }
