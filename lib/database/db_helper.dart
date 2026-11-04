@@ -199,16 +199,6 @@ class DbHelper {
     return rows.map(ClipboardModel.fromMap).toList();
   }
 
-  Future<int> deleteClips(Iterable<int> ids) async {
-    if (ids.isEmpty) return 0;
-    final marks = List.filled(ids.length, '?').join(',');
-    return _db.delete(
-      'clips',
-      where: 'id IN ($marks) AND pinned = 0',
-      whereArgs: ids.toList(),
-    );
-  }
-
   static String _marks(Iterable<Object?> xs) =>
       List.filled(xs.length, '?').join(',');
 

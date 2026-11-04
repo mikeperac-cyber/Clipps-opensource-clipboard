@@ -85,20 +85,6 @@ void main() {
     expect(got.map((e) => e.content), ['11']);
   });
 
-  test('deleteClips removes only the given ids and returns count', () async {
-    final a = await db.insertClip('a', DateTime(2026));
-    final b = await db.insertClip('b', DateTime(2026));
-    final c = await db.insertClip('c', DateTime(2026));
-    expect(await db.deleteClips([a.id, b.id]), 2);
-    expect((await db.getClips()).map((e) => e.id), [c.id]);
-  });
-
-  test('deleteClips with no ids returns 0', () async {
-    await db.insertClip('a', DateTime(2026));
-    expect(await db.deleteClips([]), 0);
-    expect(await db.getClips(), hasLength(1));
-  });
-
   test('stores 5 MB of text intact', () async {
     final big = 'x' * 5 * 1024 * 1024;
     final c = await db.insertClip(big, DateTime(2026));
@@ -158,14 +144,6 @@ void main() {
     final newer = await db.insertClip('new', DateTime(2026, 1, 2));
     await db.setPinned(old.id, true);
     expect((await db.latestClip())!.id, newer.id);
-  });
-
-  test('deleteClips never removes pinned rows', () async {
-    final p = await db.insertClip('p', DateTime(2026, 1, 1));
-    final n = await db.insertClip('n', DateTime(2026, 1, 2));
-    await db.setPinned(p.id, true);
-    expect(await db.deleteClips([p.id, n.id]), 1);
-    expect((await db.getClips()).single.id, p.id);
   });
 
   test('upgrade from v1 keeps rows', () async {

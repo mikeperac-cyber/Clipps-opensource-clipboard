@@ -26,7 +26,7 @@ class HomeScreen extends StatelessWidget {
                 : () => _confirmDelete(
                     context,
                     p.selectedIds.length,
-                  ).then((ok) => ok ? p.deleteSelected() : null),
+                  ).then((ok) => ok ? p.trashSelected() : null),
           ),
         ],
       ),
@@ -144,7 +144,7 @@ class HomeScreen extends StatelessWidget {
                               onPressed: pinned
                                   ? null
                                   : () => _confirmDelete(context, 1).then(
-                                      (ok) => ok ? p.deleteClip(clip.id) : null,
+                                      (ok) => ok ? p.trashClip(clip.id) : null,
                                     ),
                             ),
                           ],

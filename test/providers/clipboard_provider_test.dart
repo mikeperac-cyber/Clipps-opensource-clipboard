@@ -1,5 +1,7 @@
 import 'package:clipps/database/db_helper.dart';
 import 'package:clipps/models/clip_source.dart';
+import 'package:clipps/models/clip_view.dart';
+import 'package:clipps/models/clipboard_model.dart';
 import 'package:clipps/providers/clipboard_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,23 +108,23 @@ void main() {
     expect(p.selectedIds, isEmpty);
   });
 
-  test('deleteSelected removes selected rows and clears selection', () async {
+  test('trashSelected trashes selected rows and clears selection', () async {
     await p.addClip('a');
     await p.addClip('b');
     await p.addClip('c');
     p.toggleSelected(p.clips[0].id);
     p.toggleSelected(p.clips[1].id);
-    await p.deleteSelected();
+    await p.trashSelected();
     expect(p.clips.map((c) => c.content), ['a']);
     expect(p.selectedIds, isEmpty);
   });
 
-  test('deleteClip removes one row and drops it from selection', () async {
+  test('trashClip trashes one row and drops it from selection', () async {
     await p.addClip('a');
     await p.addClip('b');
     final id = p.clips.first.id;
     p.toggleSelected(id);
-    await p.deleteClip(id);
+    await p.trashClip(id);
     expect(p.clips.map((c) => c.content), ['a']);
     expect(p.selectedIds, isEmpty);
   });
@@ -136,7 +138,7 @@ void main() {
     expect(n, 2);
     p.toggleSelected(p.clips.first.id);
     expect(n, 3);
-    await p.deleteSelected();
+    await p.trashSelected();
     expect(n, 4);
   });
 
@@ -152,7 +154,10 @@ void main() {
   });
 
   test('addClip stores the source', () async {
-    await p.addClip('a', source: const ClipSource(app: 'Code', title: 'T'));
+    await p.addClip(
+      'a',
+      source: const ClipSource(app: 'Code', title: 'T'),
+    );
     expect(p.clips.first.sourceApp, 'Code');
     expect(p.clips.first.sourceTitle, 'T');
   });
@@ -193,5 +198,126 @@ void main() {
     p.markHotkeyUnavailable();
     expect(p.hotkeyUnavailable, isTrue);
     expect(n, 1);
+  });
+
+  group('v3 state', () {
+    test('trashClip hides from all and shows in trash', () async {
+      await p.addClip('a');
+      await p.trashClip(p.clips.first.id);
+      expect(p.clips, isEmpty);
+      await p.setView(ClipView.trash);
+      expect(p.clips.single.content, 'a');
+      await p.restoreClip(p.clips.first.id);
+      expect(p.clips, isEmpty);
+      await p.setView(ClipView.all);
+      expect(p.clips.single.content, 'a');
+    });
+
+    test('purgeExpiredTrash uses 15 days', () async {
+      await p.addClip('keep');
+      await p.addClip('gone');
+      final keep = p.clips[1].id, gone = p.clips[0].id;
+      await db.trashClips([
+        keep,
+      ], now.subtract(const Duration(days: 15) - const Duration(hours: 1)));
+      await db.trashClips([
+        gone,
+      ], now.subtract(const Duration(days: 15, milliseconds: 1)));
+      expect(await p.purgeExpiredTrash(), 1);
+      await p.setView(ClipView.trash);
+      expect(p.clips.map((c) => c.id), [keep]);
+    });
+
+    test('load purges expired trash', () async {
+      await p.addClip('x');
+      await db.trashClips([p.clips.first.id], now);
+      now = now.add(kTrashRetention + const Duration(milliseconds: 1));
+      await p.load();
+      await p.setView(ClipView.trash);
+      expect(p.clips, isEmpty);
+    });
+
+    test('dedupe re-adds text that is in trash', () async {
+      await p.addClip('a');
+      await p.trashClip(p.clips.first.id);
+      expect(await p.addClip('a'), isTrue);
+    });
+
+    test('setView tasks lists open tasks first', () async {
+      await p.addClip('a');
+      await p.addClip('b');
+      final a = p.clips[1].id, b = p.clips[0].id;
+      await p.makeTask(b);
+      await p.makeTask(a);
+      await p.setTaskDone(b, true);
+      await p.setView(ClipView.tasks);
+      expect(p.clips.map((c) => c.id), [a, b]);
+      expect(p.clips.last.taskState, TaskState.done);
+      await p.removeTask(a);
+      expect(p.clips.map((c) => c.id), [b]);
+    });
+
+    test('selectGroup filters and deleteGroup clears the selection', () async {
+      await p.addClip('a');
+      await p.addClip('b');
+      expect(await p.createGroup('Work'), isTrue);
+      final g = p.groups.single.id;
+      await p.setClipGroup(p.clips.first.id, g);
+      await p.selectGroup(g);
+      expect(p.groupId, g);
+      expect(p.clips.map((c) => c.content), ['b']);
+      await p.deleteGroup(g);
+      expect(p.groupId, isNull);
+      expect(p.groups, isEmpty);
+      expect(p.clips, hasLength(2));
+      await p.selectGroup(1);
+      await p.setView(ClipView.all);
+      expect(p.groupId, isNull);
+    });
+
+    test('createGroup rejects duplicates and empty names', () async {
+      expect(await p.createGroup('Work'), isTrue);
+      expect(await p.createGroup(' work '), isFalse);
+      expect(await p.createGroup(''), isFalse);
+      expect(await p.createGroup('a\nb'), isFalse);
+      expect(await p.createGroup('x' * 41), isFalse);
+      expect(await p.createGroup('x' * 40), isTrue);
+      expect(await p.createGroup('Home'), isTrue);
+      final home = p.groups.firstWhere((g) => g.name == 'Home').id;
+      expect(await p.renameGroup(home, 'WORK'), isFalse);
+      expect(await p.renameGroup(home, ' Casa '), isTrue);
+      expect(p.groups.any((g) => g.name == 'Casa'), isTrue);
+    });
+
+    test('addTag validates length and updates tagsInUse', () async {
+      await p.addClip('a');
+      final id = p.clips.first.id;
+      expect(await p.addTag(id, ''), isFalse);
+      expect(await p.addTag(id, '  '), isFalse);
+      expect(await p.addTag(id, 'x' * 31), isFalse);
+      expect(await p.addTag(id, 'a\u001Fb'), isFalse);
+      expect(await p.addTag(id, ' todo '), isTrue);
+      expect(p.tagsInUse, contains('todo'));
+      expect(p.clips.first.tags, contains('todo'));
+      await p.removeTag(id, 'todo');
+      expect(p.tagsInUse, isNot(contains('todo')));
+    });
+
+    test('setTagFilter narrows clips', () async {
+      await p.addClip('a');
+      await p.addClip('b');
+      await p.addTag(p.clips.first.id, 'one');
+      await p.setTagFilter('one');
+      expect(p.tagFilter, 'one');
+      expect(p.clips.map((c) => c.content), ['b']);
+      await p.setTagFilter(null);
+      expect(p.clips, hasLength(2));
+    });
+
+    test('startRetentionTimer is cancelled by dispose', () async {
+      p.startRetentionTimer();
+      p.dispose();
+      p = ClipboardProvider(db, clock: () => now);
+    });
   });
 }

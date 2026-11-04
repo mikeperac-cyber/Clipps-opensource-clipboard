@@ -1,4 +1,5 @@
 import 'package:clipps/database/db_helper.dart';
+import 'package:clipps/models/clip_view.dart';
 import 'package:clipps/models/clip_source.dart';
 import 'package:clipps/providers/clipboard_provider.dart';
 import 'package:clipps/screens/home_screen.dart';
@@ -160,6 +161,8 @@ void main() {
     expect(find.byKey(Key('clip-${ids[2]}')), findsOneWidget);
     final left = await t.runAsync(db.getClips);
     expect(left!.map((c) => c.content), ['a']);
+    final trash = await t.runAsync(() => db.getClips(view: ClipView.trash));
+    expect(trash!.length, 2);
   });
 
   testWidgets('deleteSelected is disabled with nothing selected', (t) async {
