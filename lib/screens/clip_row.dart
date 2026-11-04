@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/clip_view.dart';
 import '../models/clipboard_model.dart';
 import '../providers/clipboard_provider.dart';
+import 'dialogs.dart';
 import 'format.dart';
 
 Future<bool> confirmTrash(BuildContext context, int count) async {
@@ -27,6 +28,9 @@ Future<bool> confirmTrash(BuildContext context, int count) async {
   );
   return ok ?? false;
 }
+
+const _newGroup = -1;
+const _noGroup = -2;
 
 String _days(int n) => n == 1 ? '1 day' : '$n days';
 
@@ -86,34 +90,30 @@ class _ClipRowState extends State<ClipRow> {
             '${_days(trashDaysLeft(clip.deletedAt!, widget.now))}',
             style: metaStyle,
           )
-        : Row(
+        : Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            runSpacing: 2,
             children: [
               Tooltip(
                 message: clip.createdAt.toLocal().toString().substring(0, 19),
                 child: Text(
-                  relativeTime(clip.createdAt.toLocal(), widget.now),
+                  label == null
+                      ? relativeTime(clip.createdAt.toLocal(), widget.now)
+                      : '${relativeTime(clip.createdAt.toLocal(), widget.now)}'
+                            ' · $label',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: metaStyle,
                 ),
               ),
-              if (label != null)
-                Flexible(
-                  child: Text(
-                    ' · $label',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: metaStyle,
-                  ),
-                ),
               for (final tag in clip.tags)
-                Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: Chip(
-                    label: Text(tag),
-                    labelStyle: const TextStyle(fontSize: 11),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+                Chip(
+                  label: Text(tag),
+                  labelStyle: const TextStyle(fontSize: 11),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
             ],
           );
@@ -166,7 +166,70 @@ class _ClipRowState extends State<ClipRow> {
                   icon: Icon(pinned ? Icons.push_pin : Icons.push_pin_outlined),
                   onPressed: () => p.togglePin(clip.id),
                 ),
-                // Task 7 adds task / group / tag buttons here.
+                IconButton(
+                  key: Key('task-${clip.id}'),
+                  tooltip: clip.taskState == TaskState.none
+                      ? 'Make task'
+                      : 'Remove task',
+                  color: muted,
+                  icon: Icon(
+                    clip.taskState == TaskState.none
+                        ? Icons.add_task
+                        : Icons.task_alt,
+                  ),
+                  onPressed: () => clip.taskState == TaskState.none
+                      ? p.makeTask(clip.id)
+                      : p.removeTask(clip.id),
+                ),
+                PopupMenuButton<int>(
+                  key: Key('group-${clip.id}'),
+                  tooltip: 'Group',
+                  icon: Icon(Icons.folder_outlined, color: muted),
+                  onSelected: (v) {
+                    if (v == _newGroup) {
+                      showGroupNameDialog(
+                        context,
+                        title: 'New group',
+                        submit: (n) async {
+                          if (!await p.createGroup(n)) return false;
+                          final g = p.groups.where((g) => g.name == n.trim());
+                          if (g.isNotEmpty) {
+                            await p.setClipGroup(clip.id, g.first.id);
+                          }
+                          return true;
+                        },
+                      );
+                    } else {
+                      p.setClipGroup(clip.id, v == _noGroup ? null : v);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    for (final g in p.groups)
+                      PopupMenuItem(
+                        key: Key('groupOption-${g.id}'),
+                        value: g.id,
+                        child: Text(g.name),
+                      ),
+                    const PopupMenuItem(
+                      key: Key('newGroupOption'),
+                      value: _newGroup,
+                      child: Text('New group...'),
+                    ),
+                    if (clip.groupId != null)
+                      const PopupMenuItem(
+                        key: Key('removeFromGroup'),
+                        value: _noGroup,
+                        child: Text('Remove from group'),
+                      ),
+                  ],
+                ),
+                IconButton(
+                  key: Key('tags-${clip.id}'),
+                  tooltip: 'Edit tags',
+                  color: muted,
+                  icon: const Icon(Icons.sell_outlined),
+                  onPressed: () => showTagEditor(context, clip.id),
+                ),
                 IconButton(
                   key: Key('delete-${clip.id}'),
                   tooltip: pinned ? 'Unpin to delete' : 'Delete clip',

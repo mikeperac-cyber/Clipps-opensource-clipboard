@@ -68,6 +68,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                     if (!trash) const _ManualInput(),
                     _searchRow(context, p, range),
+                    if (p.tagsInUse.isNotEmpty) _tagRow(p),
                     Expanded(child: _list(p, filtered)),
                   ],
                 ),
@@ -120,6 +121,26 @@ class HomeScreen extends StatelessWidget {
             onPressed: () => p.setDateRange(null),
           ),
       ],
+    ),
+  );
+
+  Widget _tagRow(ClipboardProvider p) => Align(
+    alignment: Alignment.centerLeft,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          for (final t in p.tagsInUse)
+            FilterChip(
+              key: Key('tagFilter-$t'),
+              label: Text(t),
+              selected: p.tagFilter == t,
+              onSelected: (on) => p.setTagFilter(on ? t : null),
+            ),
+        ],
+      ),
     ),
   );
 

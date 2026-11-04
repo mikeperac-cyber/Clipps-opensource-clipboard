@@ -382,4 +382,128 @@ void main() {
       TextDecoration.lineThrough,
     );
   });
+
+  testWidgets('make task then it shows in Tasks view', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await tapKey(t, 'task-$id');
+    expect(p.clips.first.taskState, TaskState.open);
+    expect(find.byTooltip('Remove task'), findsOneWidget);
+    await openView(t, 'view-tasks');
+    expect(find.byKey(Key('clip-$id')), findsOneWidget);
+  });
+
+  testWidgets('add clip to a new group from the row menu, sidebar shows it', (
+    t,
+  ) async {
+    await show(t, clips: ['a', 'b']);
+    final id = p.clips.last.id;
+    await tapKey(t, 'group-$id');
+    await t.pumpAndSettle();
+    await tapKey(t, 'newGroupOption');
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('groupNameInput')), 'Work');
+    await tapKey(t, 'groupNameOk');
+    await t.pumpAndSettle();
+    final g = p.groups.single;
+    expect(p.clips.firstWhere((c) => c.id == id).groupId, g.id);
+    await tapKey(t, 'group-item-${g.id}');
+    expect(p.clips.map((c) => c.id), [id]);
+  });
+
+  testWidgets('duplicate group name shows error', (t) async {
+    await show(t);
+    await t.runAsync(() => p.createGroup('Work'));
+    await t.pump();
+    await tapKey(t, 'newGroup');
+    await t.enterText(find.byKey(const Key('groupNameInput')), 'work');
+    await tapKey(t, 'groupNameOk');
+    expect(find.text('Name already used or invalid'), findsOneWidget);
+  });
+
+  testWidgets('delete group from sidebar keeps the clip in All clips', (
+    t,
+  ) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() async {
+      await p.createGroup('Work');
+      await p.setClipGroup(id, p.groups.single.id);
+    });
+    await t.pump();
+    await tapKey(t, 'groupMenu-${p.groups.single.id}');
+    await t.pumpAndSettle();
+    await t.tap(find.text('Delete group'));
+    await settle(t);
+    await t.pumpAndSettle();
+    expect(p.groups, isEmpty);
+    expect(find.byKey(Key('clip-$id')), findsOneWidget);
+  });
+
+  testWidgets('edit tags: add Work, filter by chip, remove tag', (t) async {
+    await show(t, clips: ['a', 'b']);
+    final id = p.clips.last.id;
+    await tapKey(t, 'tags-$id');
+    await t.enterText(find.byKey(const Key('tagInput')), 'Work');
+    await tapKey(t, 'addTag');
+    expect(find.byKey(const Key('removeTag-Work')), findsOneWidget);
+    await t.tap(find.text('Done'));
+    await t.pumpAndSettle();
+    await tapKey(t, 'tagFilter-Work');
+    expect(p.clips.map((c) => c.id), [id]);
+    await tapKey(t, 'tagFilter-Work');
+    expect(p.clips.length, 2);
+    await tapKey(t, 'tags-$id');
+    await t.tap(
+      find.descendant(
+        of: find.byKey(const Key('removeTag-Work')),
+        matching: find.byIcon(Icons.clear),
+      ),
+    );
+    await settle(t);
+    expect(find.byKey(const Key('removeTag-Work')), findsNothing);
+  });
+
+  testWidgets('auto tags appear as chips on the row and in the filter bar', (
+    t,
+  ) async {
+    await show(t, clips: ['https://example.com']);
+    expect(find.byKey(const Key('tagFilter-Link')), findsOneWidget);
+    expect(find.widgetWithText(Chip, 'Link'), findsOneWidget);
+  });
+
+  testWidgets('many tags at narrow width do not overflow', (t) async {
+    t.view.physicalSize = const Size(700, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() async {
+      for (final x in ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven']) {
+        await p.addTag(id, x);
+      }
+    });
+    await t.pump();
+    expect(find.byKey(Key('clip-$id')), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('trash rows hide task, group and tag buttons', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() => p.trashClip(id));
+    await openView(t, 'view-trash');
+    expect(find.byKey(Key('task-$id')), findsNothing);
+    expect(find.byKey(Key('group-$id')), findsNothing);
+    expect(find.byKey(Key('tags-$id')), findsNothing);
+    expect(find.byKey(Key('restore-$id')), findsOneWidget);
+  });
+
+  testWidgets('empty selected group shows empty state', (t) async {
+    await show(t);
+    await t.runAsync(() => p.createGroup('Work'));
+    await t.pump();
+    await tapKey(t, 'group-item-${p.groups.single.id}');
+    expect(find.text('No clips in this group'), findsOneWidget);
+  });
 }
