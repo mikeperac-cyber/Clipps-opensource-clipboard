@@ -1,7 +1,7 @@
 const kAutoTags = ['Link', 'Email', 'Phone', 'Number', 'Code', 'Secret'];
 
 final _link = RegExp(r'https?://\S');
-final _email = RegExp(r'[\w.+-]+@[\w-]+(\.[\w-]+)+');
+final _email = RegExp(r'[\w.+-]{1,64}@[\w-]{1,63}(\.[\w-]{1,63})+');
 final _phone = RegExp(r'^\+?[\d\s().-]+$');
 final _number = RegExp(r'^[+-]?[\d.,\s]+$');
 final _codeLine = RegExp(
@@ -37,7 +37,7 @@ List<String> detectTags(String text) {
           t.contains(RegExp(r'\d')));
   return [
     if (link) 'Link',
-    if (_email.hasMatch(t)) 'Email',
+    if (t.contains('@') && _email.hasMatch(t)) 'Email',
     if (phone) 'Phone',
     if (!phone && _number.hasMatch(t) && _digits(t) > 0) 'Number',
     if (code) 'Code',

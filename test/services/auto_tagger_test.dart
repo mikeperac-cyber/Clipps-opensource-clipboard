@@ -34,4 +34,21 @@ void main() {
       () => expect(detectTags(input), want),
     ),
   );
+
+  group('long inputs stay linear', () {
+    final inputs = {
+      'a x 1M': 'a' * 1000000,
+      'a x 500k @ b x 500k': '${'a' * 500000}@${'b' * 500000}',
+      'digits x 1M': '1' * 1000000,
+    };
+    inputs.forEach((name, text) {
+      test(name, () {
+        final sw = Stopwatch()..start();
+        final tags = detectTags(text);
+        sw.stop();
+        expect(sw.elapsed, lessThan(const Duration(seconds: 2)));
+        if (name == 'a x 1M') expect(tags, isNot(contains('Email')));
+      });
+    });
+  });
 }
