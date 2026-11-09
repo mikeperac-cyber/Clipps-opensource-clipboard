@@ -16,6 +16,25 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+/// Right-hand column shared by the save row and the search row, so their
+/// fields end at the same edge and the controls line up.
+const _trailingWidth = 240.0;
+
+/// Names the place the user is looking at, so bulk actions read in context.
+String _viewTitle(ClipboardProvider p) {
+  final groupId = p.groupId;
+  if (groupId != null) {
+    for (final g in p.groups) {
+      if (g.id == groupId) return g.name;
+    }
+  }
+  return switch (p.view) {
+    ClipView.all => 'All clips',
+    ClipView.tasks => 'Tasks',
+    ClipView.trash => 'Trash',
+  };
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   Timer? _tick;
 
@@ -40,11 +59,12 @@ class _HomeScreenState extends State<HomeScreen> {
         p.searchText.isNotEmpty || range != null || p.tagFilter != null;
     final selected = p.selectedIds;
     final trash = p.view == ClipView.trash;
+    final canSelectAll = p.clips.any((c) => !c.pinned);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          selected.isEmpty ? 'Clipps' : '${selected.length} selected',
+          selected.isEmpty ? _viewTitle(p) : '${selected.length} selected',
         ),
         actions: [
           if (selected.isNotEmpty)
@@ -55,16 +75,30 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: p.clearSelection,
             ),
           IconButton(
-            key: const Key('deleteSelected'),
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Move to Trash',
-            onPressed: selected.isEmpty
-                ? null
-                : () => confirmTrash(
-                    context,
-                    selected.length,
-                  ).then((ok) => ok ? p.trashSelected() : null),
+            key: const Key('selectAll'),
+            icon: const Icon(Icons.select_all),
+            tooltip: 'Select all',
+            onPressed: canSelectAll ? p.selectAllVisible : null,
           ),
+          if (trash)
+            IconButton(
+              key: const Key('restoreSelected'),
+              icon: const Icon(Icons.restore),
+              tooltip: 'Restore selected',
+              onPressed: selected.isEmpty ? null : p.restoreSelected,
+            )
+          else
+            IconButton(
+              key: const Key('deleteSelected'),
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Move to Trash',
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => confirmTrash(
+                      context,
+                      selected.length,
+                    ).then((ok) => ok ? p.trashSelected() : null),
+            ),
         ],
       ),
       body: Row(
@@ -118,31 +152,39 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        TextButton.icon(
-          key: const Key('dateRange'),
-          icon: const Icon(Icons.date_range),
-          label: Text(
-            range == null
-                ? 'Any date'
-                : '${dayString(range.start)} - ${dayString(range.end)}',
+        SizedBox(
+          width: _trailingWidth,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                key: const Key('dateRange'),
+                icon: const Icon(Icons.date_range),
+                label: Text(
+                  range == null
+                      ? 'Any date'
+                      : '${dayString(range.start)} - ${dayString(range.end)}',
+                ),
+                onPressed: () async {
+                  final picked = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2000),
+                    lastDate: p.now().add(const Duration(days: 1)),
+                    initialDateRange: range,
+                  );
+                  if (picked != null) await p.setDateRange(picked);
+                },
+              ),
+              if (range != null)
+                IconButton(
+                  key: const Key('clearDateRange'),
+                  tooltip: 'Clear date range',
+                  icon: const Icon(Icons.clear),
+                  onPressed: () => p.setDateRange(null),
+                ),
+            ],
           ),
-          onPressed: () async {
-            final picked = await showDateRangePicker(
-              context: context,
-              firstDate: DateTime(2000),
-              lastDate: p.now().add(const Duration(days: 1)),
-              initialDateRange: range,
-            );
-            if (picked != null) await p.setDateRange(picked);
-          },
         ),
-        if (range != null)
-          IconButton(
-            key: const Key('clearDateRange'),
-            tooltip: 'Clear date range',
-            icon: const Icon(Icons.clear),
-            onPressed: () => p.setDateRange(null),
-          ),
       ],
     ),
   );
@@ -260,10 +302,16 @@ class _ManualInputState extends State<_ManualInput> {
             ),
           ),
           const SizedBox(width: 8),
-          FilledButton(
-            key: const Key('saveClip'),
-            onPressed: _save,
-            child: const Text('Save Clip'),
+          SizedBox(
+            width: _trailingWidth,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                key: const Key('saveClip'),
+                onPressed: _save,
+                child: const Text('Save Clip'),
+              ),
+            ),
           ),
         ],
       ),

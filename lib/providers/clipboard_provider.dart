@@ -150,6 +150,15 @@ class ClipboardProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Selects every clip in the list that can be acted on in bulk. Pinned clips
+  /// cannot be trashed, so they are left out.
+  void selectAllVisible() {
+    _selectedIds
+      ..clear()
+      ..addAll(_clips.where((c) => !c.pinned).map((c) => c.id));
+    notifyListeners();
+  }
+
   void clearSelection() {
     _selectedIds.clear();
     notifyListeners();
@@ -176,7 +185,7 @@ class ClipboardProvider extends ChangeNotifier {
   }
 
   Future<void> trashSelected() async {
-    await _db.trashClips(_selectedIds, _clock());
+    await _db.trashClips(_selectedIds.toList(), _clock());
     _selectedIds.clear();
     await load();
   }
@@ -184,6 +193,12 @@ class ClipboardProvider extends ChangeNotifier {
   Future<void> trashClip(int id) async {
     await _db.trashClips([id], _clock());
     _selectedIds.remove(id);
+    await load();
+  }
+
+  Future<void> restoreSelected() async {
+    await _db.restoreClips(_selectedIds.toList());
+    _selectedIds.clear();
     await load();
   }
 

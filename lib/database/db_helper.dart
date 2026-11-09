@@ -10,6 +10,10 @@ import '../models/clip_view.dart';
 import '../models/clipboard_model.dart';
 import '../services/auto_tagger.dart';
 
+/// Current schema version. Each migration bumps it, and the pre-upgrade backup
+/// follows it, so every future upgrade is copied before it runs.
+const kSchemaVersion = 3;
+
 class DbHelper {
   final Database _db;
   DbHelper._(this._db);
@@ -21,7 +25,7 @@ class DbHelper {
     final db = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 3,
+        version: kSchemaVersion,
         onConfigure: (db) async {
           // Deleted clip text must not linger in free pages on disk.
           await db.execute('PRAGMA secure_delete = ON');
@@ -91,7 +95,8 @@ class DbHelper {
     await db.execute('ALTER TABLE clips ADD COLUMN $name $ddl');
   }
 
-  /// Copies a pre-v3 database (and WAL files) to backups/clipps-pre-v3.db once.
+  /// Copies a database older than [kSchemaVersion] (and its WAL files) to
+  /// backups/clipps-pre-vN.db once, before the migration runs.
   /// Never throws: a failed copy must not block startup.
   static Future<void> backupBeforeUpgrade(
     DatabaseFactory factory,
@@ -99,7 +104,7 @@ class DbHelper {
   ) async {
     try {
       final dir = Directory(p.join(p.dirname(path), 'backups'));
-      final dest = p.join(dir.path, 'clipps-pre-v3.db');
+      final dest = p.join(dir.path, 'clipps-pre-v$kSchemaVersion.db');
       if (!File(path).existsSync() || File(dest).existsSync()) return;
       final probe = await factory.openDatabase(
         path,
@@ -107,7 +112,7 @@ class DbHelper {
       );
       final version = await probe.getVersion();
       await probe.close();
-      if (version >= 3) return;
+      if (version >= kSchemaVersion) return;
       await dir.create(recursive: true);
       // Sidecars first, main file last: its existence marks the copy as done.
       for (final suffix in ['-wal', '-shm', '']) {
@@ -115,7 +120,7 @@ class DbHelper {
         if (src.existsSync()) await src.copy('$dest$suffix');
       }
     } catch (e, s) {
-      debugPrint('Clipps pre-v3 backup failed: $e\n$s');
+      debugPrint('Clipps pre-upgrade backup failed: $e\n$s');
     }
   }
 

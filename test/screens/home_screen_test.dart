@@ -167,6 +167,71 @@ void main() {
     },
   );
 
+  testWidgets('app bar names the current view', (t) async {
+    await show(t, clips: ['a']);
+    String title() =>
+        (t.widget<AppBar>(find.byType(AppBar)).title! as Text).data!;
+    expect(title(), 'All clips');
+    await t.runAsync(() => p.setView(ClipView.trash));
+    await t.pump();
+    expect(title(), 'Trash');
+  });
+
+  testWidgets('select all then Move to Trash trashes every unpinned clip', (
+    t,
+  ) async {
+    await show(t, clips: ['a', 'b', 'c']);
+    await t.tap(find.byKey(const Key('selectAll')));
+    await t.pump();
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('3 selected'),
+      ),
+      findsOneWidget,
+    );
+    await t.tap(find.byKey(const Key('deleteSelected')));
+    await t.pumpAndSettle();
+    expect(find.text('Move 3 clip(s) to Trash?'), findsOneWidget);
+    await confirmDelete(t);
+    expect((await t.runAsync(db.getClips))!, isEmpty);
+    final trash = await t.runAsync(() => db.getClips(view: ClipView.trash));
+    expect(trash!.length, 3);
+  });
+
+  testWidgets('select all leaves pinned clips out', (t) async {
+    await show(t, clips: ['a', 'b']);
+    final pinned = p.clips.first.id;
+    await t.runAsync(() => p.togglePin(pinned));
+    await t.pump();
+    await t.tap(find.byKey(const Key('selectAll')));
+    await t.pump();
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('1 selected'),
+      ),
+      findsOneWidget,
+    );
+    expect(p.selectedIds, isNot(contains(pinned)));
+  });
+
+  testWidgets('in Trash, Restore selected brings the clips back', (t) async {
+    await show(t, clips: ['a', 'b']);
+    await t.tap(find.byKey(const Key('selectAll')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('deleteSelected')));
+    await t.pumpAndSettle();
+    await confirmDelete(t);
+    await t.runAsync(() => p.setView(ClipView.trash));
+    await t.pump();
+    await t.tap(find.byKey(const Key('selectAll')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('restoreSelected')));
+    await settle(t);
+    expect((await t.runAsync(db.getClips))!.length, 2);
+  });
+
   testWidgets('deleteSelected is disabled with nothing selected', (t) async {
     await show(t, clips: ['a']);
     expect(

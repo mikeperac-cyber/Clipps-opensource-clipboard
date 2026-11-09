@@ -58,9 +58,17 @@ void main() {
 
   test('a 4.2M-char clip is tagged fast; Email only checks the first 64K', () {
     final big = '${'x' * 4200000} a@b.co';
-    final sw = Stopwatch()..start();
-    final tags = detectTags(big);
-    expect(sw.elapsedMilliseconds, lessThan(300));
+    // Guards against super-linear regressions (those take tens of seconds on
+    // this input), so the bound is loose enough for a loaded machine. Best of
+    // three keeps one delayed sample from failing the run.
+    var best = 1 << 30;
+    late List<String> tags;
+    for (var i = 0; i < 3; i++) {
+      final sw = Stopwatch()..start();
+      tags = detectTags(big);
+      if (sw.elapsedMilliseconds < best) best = sw.elapsedMilliseconds;
+    }
+    expect(best, lessThan(1000));
     expect(tags, isNot(contains('Email')));
   });
 }

@@ -1,8 +1,10 @@
 ; Inno Setup script for Clipps. Build: ISCC installer\clipps.iss
-; Expects a fresh `flutter build windows` (Release) in build\windows\x64\runner\Release.
+; Expects a fresh `flutter build windows --no-tree-shake-icons` (Release) in
+; build\windows\x64\runner\Release. The full icon font avoids missing icons when
+; the tree-shaken subset is stale (seen with 3.1.0).
 
 #define AppName "Clipps"
-#define AppVersion "3.0.0"
+#define AppVersion "3.1.0"
 #define ReleaseDir "..\build\windows\x64\runner\Release"
 
 [Setup]
@@ -23,8 +25,9 @@ Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Clipps keeps running in the tray; close it so files can be replaced.
-CloseApplications=force
+; Restart Manager cannot close Clipps: its close button only hides the window to
+; the tray. PrepareToInstall (below) stops it instead.
+CloseApplications=no
 RestartApplications=no
 
 [Files]
@@ -51,3 +54,16 @@ Filename: "{app}\clipps.exe"; Description: "Launch Clipps"; Flags: nowait postin
 [UninstallRun]
 ; Stop the tray instance before its files are removed.
 Filename: "{sys}\taskkill.exe"; Parameters: "/IM clipps.exe /F"; Flags: runhidden; RunOnceId: "StopClipps"
+
+[Code]
+// Stop a running Clipps before files are replaced. SQLite's write-ahead log
+// recovers any uncommitted write on the next start, so a forced stop is safe.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM clipps.exe /F', '', SW_HIDE,
+    ewWaitUntilTerminated, ResultCode);
+  Sleep(1000);
+  Result := '';
+end;
