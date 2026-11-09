@@ -128,6 +128,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
+                    if (p.capturePaused)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                        child: Text(
+                          'Capture is paused. New copies are not saved.',
+                          key: const Key('pausedBanner'),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.tertiary,
+                          ),
+                        ),
+                      ),
                     if (!trash && !notesView) const _ManualInput(),
                     if (!notesView) _searchRow(context, p, range),
                     if (!notesView && p.tagsInUse.isNotEmpty) _tagRow(p),

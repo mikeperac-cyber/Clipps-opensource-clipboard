@@ -384,6 +384,16 @@ void main() {
     );
   });
 
+  testWidgets('paused shows the banner', (t) async {
+    await t.runAsync(() => p.setCapturePaused(true));
+    await show(t);
+    expect(find.byKey(const Key('pausedBanner')), findsOneWidget);
+    expect(
+      find.text('Capture is paused. New copies are not saved.'),
+      findsOneWidget,
+    );
+  });
+
   Future<void> openView(WidgetTester t, String key) async {
     await t.tap(find.byKey(Key(key)));
     await settle(t);

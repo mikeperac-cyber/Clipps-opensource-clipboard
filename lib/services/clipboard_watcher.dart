@@ -9,6 +9,7 @@ class ClipboardWatcher {
     required this.onText,
     this.onFocusSearch,
     this.onHotkeyUnavailable,
+    this.onTogglePause,
     Future<String?> Function()? readText,
     this.channel = const MethodChannel('clipps/clipboard'),
   }) : _readText = readText ?? _readPlainText;
@@ -16,6 +17,7 @@ class ClipboardWatcher {
   final Future<void> Function(String text, ClipSource source) onText;
   final VoidCallback? onFocusSearch;
   final VoidCallback? onHotkeyUnavailable;
+  final VoidCallback? onTogglePause;
   final Future<String?> Function() _readText;
   final MethodChannel channel;
 
@@ -37,6 +39,17 @@ class ClipboardWatcher {
 
   void stop() => channel.setMethodCallHandler(null);
 
+  /// Tells the native tray whether capture is paused.
+  Future<void> setPaused(bool paused) async {
+    try {
+      await channel.invokeMethod('setPaused', paused);
+    } on MissingPluginException {
+      // no native side (tests)
+    } on PlatformException {
+      // tray state is cosmetic
+    }
+  }
+
   Future<void> _onCall(MethodCall call) async {
     switch (call.method) {
       case 'focusSearch':
@@ -44,6 +57,9 @@ class ClipboardWatcher {
         return;
       case 'hotkeyUnavailable':
         onHotkeyUnavailable?.call();
+        return;
+      case 'togglePause':
+        onTogglePause?.call();
         return;
       case 'clipboardChanged':
         break;

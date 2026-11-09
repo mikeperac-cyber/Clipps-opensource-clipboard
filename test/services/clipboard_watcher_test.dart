@@ -177,4 +177,42 @@ void main() {
     await _native('focusSearch');
     expect(received, isEmpty);
   });
+
+  test('togglePause calls onTogglePause', () async {
+    var n = 0;
+    watcher = ClipboardWatcher(
+      onText: (t, s) async {},
+      onTogglePause: () => n++,
+    )..start();
+    await _native('togglePause');
+    expect(n, 1);
+  });
+
+  test('setPaused sends setPaused with the flag', () async {
+    final calls = <MethodCall>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('clipps/clipboard'),
+      (c) async {
+        calls.add(c);
+        return null;
+      },
+    );
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(
+        const MethodChannel('clipps/clipboard'),
+        null,
+      ),
+    );
+    watcher = ClipboardWatcher(onText: (t, s) async {});
+    await watcher.setPaused(true);
+    expect(calls.single.method, 'setPaused');
+    expect(calls.single.arguments, true);
+  });
+
+  test('setPaused without a native side is ignored', () async {
+    watcher = ClipboardWatcher(onText: (t, s) async {});
+    await watcher.setPaused(true);
+  });
 }

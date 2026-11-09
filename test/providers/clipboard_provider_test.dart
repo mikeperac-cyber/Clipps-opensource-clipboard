@@ -460,4 +460,17 @@ void main() {
       expect(p.notes, isEmpty);
     });
   });
+
+  group('pause capture', () {
+    test('pause persists across load', () async {
+      await p.setCapturePaused(true);
+      final p2 = ClipboardProvider(db);
+      await p2.load();
+      expect(p2.capturePaused, isTrue);
+    });
+    test('manual save works while paused', () async {
+      await p.setCapturePaused(true);
+      expect(await p.addClip('typed by hand'), isTrue);
+    });
+  });
 }

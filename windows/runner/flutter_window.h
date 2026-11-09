@@ -51,6 +51,9 @@ class FlutterWindow : public Win32Window {
   // False when RegisterHotKey failed (another app owns the shortcut).
   bool hotkey_registered_ = false;
 
+  // Mirrors the Dart pause switch; shown in the tray tooltip and menu.
+  bool capture_paused_ = false;
+
   // Set by the tray "Quit" item so WM_CLOSE destroys instead of hiding.
   bool quitting_ = false;
 

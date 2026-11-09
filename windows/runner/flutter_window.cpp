@@ -11,6 +11,7 @@ namespace {
 constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kMenuOpen = 1;
 constexpr UINT kMenuQuit = 2;
+constexpr UINT kMenuPause = 3;
 constexpr UINT_PTR kClipboardTimer = 1;
 constexpr UINT kClipboardDelayMs = 50;
 constexpr int kClipboardMaxAttempts = 10;
@@ -126,6 +127,24 @@ bool FlutterWindow::OnCreate() {
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           flutter_controller_->engine()->messenger(), "clipps/clipboard",
           &flutter::StandardMethodCodec::GetInstance());
+  clipboard_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() == "setPaused") {
+          const auto* paused = std::get_if<bool>(call.arguments());
+          if (paused) {
+            capture_paused_ = *paused;
+            wcscpy_s(tray_icon_.szTip,
+                     capture_paused_ ? L"Clipps \u2014 capture paused"
+                                     : L"Clipps \u2014 clipboard history");
+            Shell_NotifyIcon(NIM_MODIFY, &tray_icon_);
+          }
+          result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
   AddClipboardFormatListener(GetHandle());
   hotkey_registered_ = RegisterHotKey(GetHandle(), kHotkeyId,
                                       MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
@@ -161,6 +180,9 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   Shell_NotifyIcon(NIM_DELETE, &tray_icon_);
+  if (clipboard_channel_) {
+    clipboard_channel_->SetMethodCallHandler(nullptr);
+  }
   clipboard_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -202,6 +224,8 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     } else if (LOWORD(lparam) == WM_RBUTTONUP) {
       HMENU menu = CreatePopupMenu();
       AppendMenuW(menu, MF_STRING, kMenuOpen, L"Open");
+      AppendMenuW(menu, MF_STRING | (capture_paused_ ? MF_CHECKED : 0),
+                  kMenuPause, L"Pause capture");
       AppendMenuW(menu, MF_STRING, kMenuQuit, L"Quit");
       POINT pt;
       GetCursorPos(&pt);
@@ -213,6 +237,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       PostMessage(hwnd, WM_NULL, 0, 0);
       if (cmd == kMenuOpen) {
         ShowAndForeground(hwnd);
+      } else if (cmd == kMenuPause) {
+        if (clipboard_channel_) {
+          clipboard_channel_->InvokeMethod("togglePause", nullptr);
+        }
       } else if (cmd == kMenuQuit) {
         quitting_ = true;
         PostMessage(hwnd, WM_CLOSE, 0, 0);

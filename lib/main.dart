@@ -53,13 +53,22 @@ Future<Widget> buildApp(String dbPath) async {
     await provider.load();
     provider.startRetentionTimer();
     BackupService(db, p.join(p.dirname(dbPath), 'backups')).start();
-    ClipboardWatcher(
+    final watcher = ClipboardWatcher(
       onText: (t, s) async {
-        await provider.addClip(t, source: s);
+        if (!provider.capturePaused) await provider.addClip(t, source: s);
       },
       onFocusSearch: provider.requestSearchFocus,
       onHotkeyUnavailable: provider.markHotkeyUnavailable,
-    ).start();
+      onTogglePause: () => provider.setCapturePaused(!provider.capturePaused),
+    )..start();
+    var sentPaused = provider.capturePaused;
+    watcher.setPaused(sentPaused);
+    provider.addListener(() {
+      if (provider.capturePaused != sentPaused) {
+        sentPaused = provider.capturePaused;
+        watcher.setPaused(sentPaused);
+      }
+    });
     return ChangeNotifierProvider.value(
       value: provider,
       child: const ClippsApp(),

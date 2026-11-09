@@ -46,6 +46,7 @@ class ClipboardProvider extends ChangeNotifier {
   Timer? _retentionTimer;
   List<NoteEntry> _notes = [];
   ThemeMode _themeMode = ThemeMode.system;
+  bool _capturePaused = false;
 
   DateTime now() => _clock();
 
@@ -58,6 +59,7 @@ class ClipboardProvider extends ChangeNotifier {
   List<ClipboardModel> get clips => _clips;
   List<NoteEntry> get notes => _notes;
   ThemeMode get themeMode => _themeMode;
+  bool get capturePaused => _capturePaused;
   String get searchText => _searchText;
   DateTimeRange? get dateRange => _dateRange;
   Set<int> get selectedIds => Set.unmodifiable(_selectedIds);
@@ -137,7 +139,14 @@ class ClipboardProvider extends ChangeNotifier {
   Future<void> load() async {
     await _db.purgeTrashedBefore(_clock().subtract(kTrashRetention));
     _themeMode = themeFromSetting(await _db.getSetting('theme'));
+    _capturePaused = await _db.getSetting('capture_paused') == 'true';
     await _reload();
+    notifyListeners();
+  }
+
+  Future<void> setCapturePaused(bool paused) async {
+    await _db.setSetting('capture_paused', paused ? 'true' : 'false');
+    _capturePaused = paused;
     notifyListeners();
   }
 

@@ -114,6 +114,14 @@ class Sidebar extends StatelessWidget {
               ],
             ),
           ),
+          SwitchListTile(
+            key: const Key('pauseCapture'),
+            dense: true,
+            secondary: const Icon(Icons.pause_circle_outline),
+            title: const Text('Pause capture'),
+            value: p.capturePaused,
+            onChanged: p.setCapturePaused,
+          ),
           ListTile(
             key: const Key('aboutClipps'),
             dense: true,
