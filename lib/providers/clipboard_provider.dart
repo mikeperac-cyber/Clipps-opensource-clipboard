@@ -13,7 +13,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart' show DatabaseException;
 
 const kTrashRetention = Duration(days: 15);
 
-enum NoteResult { saved, blank, tooLong }
+enum NoteResult { saved, blank, tooLong, missing }
 
 ThemeMode themeFromSetting(String? value) => switch (value) {
   'light' => ThemeMode.light,
@@ -155,7 +155,13 @@ class ClipboardProvider extends ChangeNotifier {
   Future<NoteResult> addNote(int clipId, String body) async {
     final err = _noteError(body);
     if (err != null) return err;
-    await _db.addNote(clipId, body, _clock());
+    try {
+      await _db.addNote(clipId, body, _clock());
+    } on DatabaseException {
+      // The clip was purged meanwhile (foreign key). Refresh and report it.
+      await load();
+      return NoteResult.missing;
+    }
     await load();
     return NoteResult.saved;
   }
@@ -163,9 +169,9 @@ class ClipboardProvider extends ChangeNotifier {
   Future<NoteResult> editNote(int id, String body) async {
     final err = _noteError(body);
     if (err != null) return err;
-    await _db.updateNote(id, body, _clock());
+    final ok = await _db.updateNote(id, body, _clock());
     await load();
-    return NoteResult.saved;
+    return ok ? NoteResult.saved : NoteResult.missing;
   }
 
   Future<void> deleteNote(int id) => _mutate(() => _db.deleteNote(id));

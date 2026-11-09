@@ -397,6 +397,32 @@ void main() {
       expect(p.clips.first.noteCount, 0);
     });
 
+    test('addNote for a missing clip returns missing without throwing', () async {
+      expect(await p.addNote(9999, 'x'), NoteResult.missing);
+    });
+
+    test('editNote on a purged note returns missing', () async {
+      final id = await clip();
+      await p.addNote(id, 'a');
+      final n = (await p.notesFor(id)).single;
+      await p.trashClip(id);
+      await db.purgeTrashedBefore(now.add(const Duration(days: 1)));
+      expect(await p.editNote(n.id, 'b'), NoteResult.missing);
+    });
+
+    test('add, edit and delete note each notify once', () async {
+      final id = await clip();
+      var c = 0;
+      p.addListener(() => c++);
+      expect(await p.addNote(id, 'a'), NoteResult.saved);
+      expect(c, 1);
+      final n = (await p.notesFor(id)).single;
+      expect(await p.editNote(n.id, 'b'), NoteResult.saved);
+      expect(c, 2);
+      await p.deleteNote(n.id);
+      expect(c, 3);
+    });
+
     test('notes list excludes trashed clips; view clears state', () async {
       final a = await clip();
       final b = await clip();
