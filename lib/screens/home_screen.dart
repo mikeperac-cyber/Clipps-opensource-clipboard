@@ -154,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Expanded(
           child: _SearchField(
+            initialText: p.searchText,
             focusRequests: p.searchFocusRequests,
             onChanged: p.setSearchText,
           ),
@@ -222,13 +223,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _notesList(ClipboardProvider p) {
     if (p.notes.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.notes, size: 40, color: Colors.grey),
-            SizedBox(height: 8),
-            Text('No notes yet'),
+            Icon(
+              Icons.notes,
+              size: 40,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 8),
+            const Text('No notes yet'),
           ],
         ),
       );
@@ -288,7 +293,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40, color: Colors.grey),
+            Icon(
+              icon,
+              size: 40,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 8),
             Text(text),
           ],
@@ -379,8 +388,13 @@ class _ManualInputState extends State<_ManualInput> {
 }
 
 class _SearchField extends StatefulWidget {
-  const _SearchField({required this.focusRequests, required this.onChanged});
+  const _SearchField({
+    required this.initialText,
+    required this.focusRequests,
+    required this.onChanged,
+  });
 
+  final String initialText;
   final int focusRequests;
   final ValueChanged<String> onChanged;
 
@@ -389,7 +403,7 @@ class _SearchField extends StatefulWidget {
 }
 
 class _SearchFieldState extends State<_SearchField> {
-  final _controller = TextEditingController();
+  late final _controller = TextEditingController(text: widget.initialText);
   final _focus = FocusNode();
 
   @override

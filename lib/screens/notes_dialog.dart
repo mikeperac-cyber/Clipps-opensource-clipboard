@@ -9,13 +9,18 @@ import 'format.dart';
 Future<void> showNotesDialog(BuildContext context, ClipboardModel clip) =>
     showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => _NotesDialog(clip: clip),
     );
 
+const _saveFailedCopy = 'Could not save this note. Your text is still here.';
 const _tooLongCopy = 'Notes are limited to 20,000 characters';
 
 /// Local `YYYY-MM-DD HH:mm`.
 String _stamp(DateTime t) => t.toLocal().toString().substring(0, 16);
+
+/// Local `HH:mm`.
+String _time(DateTime t) => t.toLocal().toString().substring(11, 16);
 
 class _NotesDialog extends StatefulWidget {
   const _NotesDialog({required this.clip});
@@ -88,14 +93,22 @@ class _NotesDialogState extends State<_NotesDialog> {
   }
 
   Future<void> _add() async {
-    final r = await _p.addNote(widget.clip.id, _input.text);
-    if (await _finish(r, edit: false)) _input.clear();
+    try {
+      final r = await _p.addNote(widget.clip.id, _input.text);
+      if (await _finish(r, edit: false)) _input.clear();
+    } catch (_) {
+      if (mounted) setState(() => _inputError = _saveFailedCopy);
+    }
   }
 
   Future<void> _save(int id) async {
-    final r = await _p.editNote(id, _edit.text);
-    if (await _finish(r, edit: true) && mounted) {
-      setState(() => _editing = null);
+    try {
+      final r = await _p.editNote(id, _edit.text);
+      if (await _finish(r, edit: true) && mounted) {
+        setState(() => _editing = null);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _editError = _saveFailedCopy);
     }
   }
 
@@ -158,7 +171,7 @@ class _NotesDialogState extends State<_NotesDialog> {
       title: Text(n.body),
       subtitle: Text(
         'Created ${_stamp(n.createdAt)}'
-        '${n.edited ? ' · edited ${_stamp(n.updatedAt)}' : ''}',
+        '${n.edited ? ' · edited ${_time(n.updatedAt)}' : ''}',
         style: TextStyle(fontSize: 12, color: muted),
       ),
       trailing: Row(

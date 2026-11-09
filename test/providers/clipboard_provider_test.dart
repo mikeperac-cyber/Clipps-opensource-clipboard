@@ -401,6 +401,25 @@ void main() {
       expect(await p.addNote(9999, 'x'), NoteResult.missing);
     });
 
+    test('addNote rethrows a non-foreign-key database error', () async {
+      final id = await clip();
+      await db.rawDb.execute(
+        "CREATE TRIGGER boom BEFORE INSERT ON notes "
+        "BEGIN SELECT RAISE(ABORT, 'boom'); END",
+      );
+      await expectLater(p.addNote(id, 'x'), throwsA(isA<DatabaseException>()));
+    });
+
+    test('restoring a trashed clip brings its notes back', () async {
+      final id = await clip();
+      await p.addNote(id, 'keep me');
+      await p.trashClip(id);
+      expect(await db.notesView(), isEmpty);
+      await p.restoreClip(id);
+      expect((await db.notesView()).single.note.body, 'keep me');
+      expect((await p.notesFor(id)).single.body, 'keep me');
+    });
+
     test('editNote on a purged note returns missing', () async {
       final id = await clip();
       await p.addNote(id, 'a');

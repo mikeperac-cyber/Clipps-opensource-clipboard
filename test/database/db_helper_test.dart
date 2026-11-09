@@ -651,6 +651,7 @@ void main() {
       expect(clips.length, 2);
       final got = clips.firstWhere((x) => x.id == a.id);
       expect(got.pinned, isTrue);
+      expect(got.groupId, g.id);
       expect(got.tags, containsAll(['Email', 'Work']));
       expect(got.noteCount, 0);
       expect((await h.listGroups()).single.name, 'G');
@@ -658,6 +659,15 @@ void main() {
       expect(await h.getSetting('x'), isNull);
       final v = await h.rawDb.rawQuery('PRAGMA user_version');
       expect(v.single.values.single, 4);
+      await h.close();
+    });
+
+    test('deleteNote checkpoints on a file DB', () async {
+      final h = await DbHelper.open(databaseFactoryFfi, path);
+      final c = await h.insertClip('x', DateTime(2026));
+      final n = await h.addNote(c.id, 'secret', DateTime(2026));
+      expect(await h.deleteNote(n.id), 1);
+      expect(await h.notesForClip(c.id), isEmpty);
       await h.close();
     });
 

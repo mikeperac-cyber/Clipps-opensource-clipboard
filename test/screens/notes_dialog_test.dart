@@ -67,7 +67,7 @@ void main() {
     await t.tap(find.byKey(Key('saveNote-$id')));
     await settle(t);
     expect(find.text('second'), findsOneWidget);
-    expect(find.textContaining('edited'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'· edited \d\d:\d\d$')), findsOneWidget);
 
     await t.tap(find.byKey(Key('deleteNote-$id')));
     await t.pumpAndSettle();
@@ -106,6 +106,46 @@ void main() {
     await t.enterText(find.byKey(const Key('noteInput')), 'ok');
     await t.pump();
     expect(err(), isNull);
+  });
+
+  testWidgets('an unexpected save error keeps the text and shows copy', (
+    t,
+  ) async {
+    await open(t, 'clip');
+    await t.runAsync(
+      () => db.rawDb.execute(
+        "CREATE TRIGGER boom BEFORE INSERT ON notes "
+        "BEGIN SELECT RAISE(ABORT, 'boom'); END",
+      ),
+    );
+    await t.enterText(find.byKey(const Key('noteInput')), 'keep this');
+    await t.pump();
+    await t.tap(find.byKey(const Key('addNote')));
+    await settle(t);
+    expect(
+      t
+          .widget<TextField>(find.byKey(const Key('noteInput')))
+          .decoration!
+          .errorText,
+      'Could not save this note. Your text is still here.',
+    );
+    expect(find.text('keep this'), findsOneWidget);
+  });
+
+  testWidgets('purged clip closes the dialog with no success message', (
+    t,
+  ) async {
+    await open(t, 'clip');
+    await t.runAsync(() async {
+      await db.trashClips([p.clips.first.id], DateTime(2026));
+      await db.purgeTrashedBefore(DateTime(2027));
+    });
+    await t.enterText(find.byKey(const Key('noteInput')), 'orphan');
+    await t.pump();
+    await t.tap(find.byKey(const Key('addNote')));
+    await settle(t);
+    expect(find.byKey(const Key('noteInput')), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('dialog shows the full clip text', (t) async {

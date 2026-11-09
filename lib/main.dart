@@ -20,7 +20,9 @@ class ClippsApp extends StatelessWidget {
       title: 'Clipps',
       theme: appTheme(Brightness.light),
       darkTheme: appTheme(Brightness.dark),
-      themeMode: context.watch<ClipboardProvider>().themeMode,
+      themeMode: context.select<ClipboardProvider, ThemeMode>(
+        (p) => p.themeMode,
+      ),
       home: const HomeScreen(),
     );
   }

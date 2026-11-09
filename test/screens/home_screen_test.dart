@@ -146,6 +146,21 @@ void main() {
     },
   );
 
+  testWidgets('search text survives Notes -> All and still filters', (t) async {
+    await show(t, clips: ['apple', 'banana']);
+    await t.enterText(find.byKey(const Key('search')), 'apple');
+    await settle(t);
+    await tapKey(t, 'view-notes');
+    await tapKey(t, 'view-all');
+    expect(
+      t.widget<TextField>(find.byKey(const Key('search'))).controller!.text,
+      'apple',
+    );
+    expect(find.byKey(Key('clip-${p.clips.single.id}')), findsOneWidget);
+    expect(p.clips.map((c) => c.content), ['apple']);
+    expect(find.text('banana'), findsNothing);
+  });
+
   testWidgets(
     'select two clips, confirm Move to Trash: both gone from list and DB',
     (t) async {

@@ -36,8 +36,6 @@ void main() {
         ),
       };
       pairs.forEach((name, ratio) {
-        // ignore: avoid_print
-        print('$b $name ${ratio.toStringAsFixed(2)}');
         expect(ratio, greaterThanOrEqualTo(4.5), reason: '$b $name');
       });
     }

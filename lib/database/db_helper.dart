@@ -290,7 +290,8 @@ class DbHelper {
     );
   }
 
-  /// The app's ONLY permanent delete: trashed rows strictly older than [cutoff].
+  /// The 15-day Trash purge (cascades to notes): trashed rows strictly older
+  /// than [cutoff]. The confirmed single-note delete is the other permanent delete.
   Future<int> purgeTrashedBefore(DateTime cutoff) async {
     final n = await _db.delete(
       'clips',
@@ -427,8 +428,12 @@ class DbHelper {
         0;
   }
 
-  Future<int> deleteNote(int id) =>
-      _db.delete('notes', where: 'id = ?', whereArgs: [id]);
+  Future<int> deleteNote(int id) async {
+    final n = await _db.delete('notes', where: 'id = ?', whereArgs: [id]);
+    // Deleted note text must not linger in the -wal file.
+    if (n > 0) await checkpoint();
+    return n;
+  }
 
   Future<List<Note>> notesForClip(int clipId) async {
     final rows = await _db.query(

@@ -157,8 +157,10 @@ class ClipboardProvider extends ChangeNotifier {
     if (err != null) return err;
     try {
       await _db.addNote(clipId, body, _clock());
-    } on DatabaseException {
-      // The clip was purged meanwhile (foreign key). Refresh and report it.
+    } on DatabaseException catch (e) {
+      // 787 = SQLITE_CONSTRAINT_FOREIGNKEY: the clip was purged meanwhile.
+      // Anything else (disk, lock, I/O) must reach the caller.
+      if (e.getResultCode() != 787) rethrow;
       await load();
       return NoteResult.missing;
     }
