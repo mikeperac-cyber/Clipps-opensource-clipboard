@@ -872,4 +872,9 @@ void main() {
       expect(find.text('Copy any text and it appears here.'), findsOneWidget);
     });
   });
+
+  testWidgets('rows with repeated text show Duplicate', (t) async {
+    await show(t, clips: ['same', 'x', 'same']);
+    expect(find.text('Duplicate'), findsNWidgets(2));
+  });
 }

@@ -283,6 +283,16 @@ class DbHelper {
     );
   }
 
+  /// Ids of live clips whose exact text is saved more than once outside Trash.
+  Future<Set<int>> duplicateIds() async => {
+    for (final r in await _db.rawQuery(
+      'SELECT id FROM clips WHERE deleted_at IS NULL AND content IN '
+      '(SELECT content FROM clips WHERE deleted_at IS NULL '
+      'GROUP BY content HAVING COUNT(*) > 1)',
+    ))
+      r['id']! as int,
+  };
+
   Future<int> restoreClips(Iterable<int> ids) async {
     if (ids.isEmpty) return 0;
     return _db.rawUpdate(

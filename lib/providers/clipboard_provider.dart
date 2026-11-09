@@ -42,6 +42,7 @@ class ClipboardProvider extends ChangeNotifier {
   int? _groupId;
   String? _tagFilter;
   List<ClipGroup> _groups = [];
+  Set<int> _duplicateIds = {};
   List<String> _tagsInUse = [];
   Timer? _retentionTimer;
   List<NoteEntry> _notes = [];
@@ -49,6 +50,8 @@ class ClipboardProvider extends ChangeNotifier {
   bool _capturePaused = false;
 
   DateTime now() => _clock();
+
+  bool isDuplicate(int id) => _duplicateIds.contains(id);
 
   ClipView get view => _view;
   int? get groupId => _groupId;
@@ -108,6 +111,7 @@ class ClipboardProvider extends ChangeNotifier {
     );
     _groups = await _db.listGroups();
     _tagsInUse = await _db.tagsInUse();
+    _duplicateIds = await _db.duplicateIds();
     final f = _tagFilter;
     if (f != null &&
         !_tagsInUse.any((t) => t.toLowerCase() == f.toLowerCase())) {

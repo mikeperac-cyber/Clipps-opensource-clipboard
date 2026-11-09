@@ -116,6 +116,25 @@ class _ClipRowState extends State<ClipRow> {
                   padding: EdgeInsets.zero,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
+              if (p.isDuplicate(clip.id))
+                Tooltip(
+                  message: 'This text is saved more than once',
+                  child: Chip(
+                    key: Key('dupBadge-${clip.id}'),
+                    avatar: Icon(
+                      Icons.content_copy,
+                      size: 14,
+                      color: scheme.tertiary,
+                    ),
+                    label: Text(
+                      'Duplicate',
+                      style: TextStyle(fontSize: 11, color: scheme.tertiary),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
             ],
           );
 

@@ -681,4 +681,14 @@ void main() {
       await h.close();
     });
   });
+
+  test('duplicateIds finds repeats outside Trash only', () async {
+    final t = DateTime(2026, 1, 1, 10);
+    final a = await db.insertClip('same', t);
+    await db.insertClip('other', t.add(const Duration(minutes: 1)));
+    final c = await db.insertClip('same', t.add(const Duration(minutes: 2)));
+    expect(await db.duplicateIds(), {a.id, c.id});
+    await db.trashClips([c.id], t.add(const Duration(minutes: 3)));
+    expect(await db.duplicateIds(), isEmpty);
+  });
 }
