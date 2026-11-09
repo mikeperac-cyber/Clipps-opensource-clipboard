@@ -1,1 +1,1 @@
-enum ClipView { all, tasks, trash }
+enum ClipView { all, tasks, trash, notes }

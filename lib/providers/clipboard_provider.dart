@@ -7,10 +7,19 @@ import '../models/clip_group.dart';
 import '../models/clip_source.dart';
 import '../models/clip_view.dart';
 import '../models/clipboard_model.dart';
+import '../models/note.dart';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show DatabaseException;
 
 const kTrashRetention = Duration(days: 15);
+
+enum NoteResult { saved, blank, tooLong }
+
+ThemeMode themeFromSetting(String? value) => switch (value) {
+  'light' => ThemeMode.light,
+  'dark' => ThemeMode.dark,
+  _ => ThemeMode.system,
+};
 
 class ClipboardProvider extends ChangeNotifier {
   ClipboardProvider(this._db, {this._clock = DateTime.now});
@@ -32,6 +41,8 @@ class ClipboardProvider extends ChangeNotifier {
   List<ClipGroup> _groups = [];
   List<String> _tagsInUse = [];
   Timer? _retentionTimer;
+  List<NoteEntry> _notes = [];
+  ThemeMode _themeMode = ThemeMode.system;
 
   DateTime now() => _clock();
 
@@ -42,6 +53,8 @@ class ClipboardProvider extends ChangeNotifier {
   List<String> get tagsInUse => _tagsInUse;
 
   List<ClipboardModel> get clips => _clips;
+  List<NoteEntry> get notes => _notes;
+  ThemeMode get themeMode => _themeMode;
   String get searchText => _searchText;
   DateTimeRange? get dateRange => _dateRange;
   Set<int> get selectedIds => Set.unmodifiable(_selectedIds);
@@ -67,6 +80,14 @@ class ClipboardProvider extends ChangeNotifier {
   }
 
   Future<void> _reload() async {
+    if (_view == ClipView.notes) {
+      _clips = [];
+      _notes = await _db.notesView();
+      _groups = await _db.listGroups();
+      _tagsInUse = await _db.tagsInUse();
+      return;
+    }
+    _notes = [];
     final r = _dateRange;
     _clips = await _db.getClips(
       text: _searchText,
@@ -112,9 +133,42 @@ class ClipboardProvider extends ChangeNotifier {
 
   Future<void> load() async {
     await _db.purgeTrashedBefore(_clock().subtract(kTrashRetention));
+    _themeMode = themeFromSetting(await _db.getSetting('theme'));
     await _reload();
     notifyListeners();
   }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    await _db.setSetting('theme', mode.name);
+    _themeMode = mode;
+    notifyListeners();
+  }
+
+  Future<List<Note>> notesFor(int clipId) => _db.notesForClip(clipId);
+
+  static NoteResult? _noteError(String body) {
+    if (body.trim().isEmpty) return NoteResult.blank;
+    if (body.length > kMaxNoteLength) return NoteResult.tooLong;
+    return null;
+  }
+
+  Future<NoteResult> addNote(int clipId, String body) async {
+    final err = _noteError(body);
+    if (err != null) return err;
+    await _db.addNote(clipId, body, _clock());
+    await load();
+    return NoteResult.saved;
+  }
+
+  Future<NoteResult> editNote(int id, String body) async {
+    final err = _noteError(body);
+    if (err != null) return err;
+    await _db.updateNote(id, body, _clock());
+    await load();
+    return NoteResult.saved;
+  }
+
+  Future<void> deleteNote(int id) => _mutate(() => _db.deleteNote(id));
 
   Future<bool> addClip(
     String content, {

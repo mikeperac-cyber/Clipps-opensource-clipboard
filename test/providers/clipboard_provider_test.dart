@@ -320,4 +320,99 @@ void main() {
       p = ClipboardProvider(db, clock: () => now);
     });
   });
+
+  group('notes and theme', () {
+    Future<int> clip() async {
+      await p.addClip('c${p.clips.length}');
+      return p.clips.first.id;
+    }
+
+    test('themeFromSetting defaults to system', () {
+      for (final v in [null, '', 'blue']) {
+        expect(themeFromSetting(v), ThemeMode.system);
+      }
+      expect(themeFromSetting('light'), ThemeMode.light);
+      expect(themeFromSetting('dark'), ThemeMode.dark);
+    });
+
+    test('setThemeMode saves and notifies; new provider reads it', () async {
+      var n = 0;
+      p.addListener(() => n++);
+      await p.setThemeMode(ThemeMode.dark);
+      expect(n, 1);
+      expect(p.themeMode, ThemeMode.dark);
+      final q = ClipboardProvider(db, clock: () => now);
+      await q.load();
+      expect(q.themeMode, ThemeMode.dark);
+      await p.setThemeMode(ThemeMode.system);
+      expect(await db.getSetting('theme'), 'system');
+    });
+
+    test('addNote refuses blank and whitespace-only', () async {
+      final id = await clip();
+      expect(await p.addNote(id, ''), NoteResult.blank);
+      expect(await p.addNote(id, ' \n\t'), NoteResult.blank);
+      expect(await p.notesFor(id), isEmpty);
+    });
+
+    test('addNote refuses over 20,000 characters', () async {
+      final id = await clip();
+      expect(await p.addNote(id, 'a' * 20001), NoteResult.tooLong);
+      expect(await p.addNote(id, 'a' * 20000), NoteResult.saved);
+      expect((await p.notesFor(id)).length, 1);
+    });
+
+    test('addNote keeps newlines and emoji intact', () async {
+      final id = await clip();
+      const body = 'line 1\n\u{1F44D}\u{1F3FD} line 2 ';
+      await p.addNote(id, body);
+      expect((await p.notesFor(id)).single.body, body);
+      expect(p.clips.first.noteCount, 1);
+    });
+
+    test('editNote changes text; same text does not change edited', () async {
+      final id = await clip();
+      await p.addNote(id, 'a');
+      final n = (await p.notesFor(id)).single;
+      now = now.add(const Duration(minutes: 1));
+      expect(await p.editNote(n.id, 'a'), NoteResult.saved);
+      expect((await p.notesFor(id)).single.edited, isFalse);
+      expect(await p.editNote(n.id, 'b'), NoteResult.saved);
+      final e = (await p.notesFor(id)).single;
+      expect(e.body, 'b');
+      expect(e.edited, isTrue);
+      expect(await p.editNote(n.id, '  '), NoteResult.blank);
+      expect(await p.editNote(n.id, 'a' * 20001), NoteResult.tooLong);
+    });
+
+    test('deleteNote removes it and notifies', () async {
+      final id = await clip();
+      await p.addNote(id, 'a');
+      final n = (await p.notesFor(id)).single;
+      var c = 0;
+      p.addListener(() => c++);
+      await p.deleteNote(n.id);
+      expect(c, 1);
+      expect(await p.notesFor(id), isEmpty);
+      expect(p.clips.first.noteCount, 0);
+    });
+
+    test('notes list excludes trashed clips; view clears state', () async {
+      final a = await clip();
+      final b = await clip();
+      await p.addNote(a, 'x');
+      await p.addNote(b, 'y');
+      await p.trashClip(b);
+      await p.createGroup('g');
+      await p.selectGroup(p.groups.first.id);
+      p.toggleSelected(a);
+      await p.setView(ClipView.notes);
+      expect(p.selectedIds, isEmpty);
+      expect(p.groupId, isNull);
+      expect(p.clips, isEmpty);
+      expect(p.notes.map((e) => e.note.body), ['x']);
+      await p.setView(ClipView.all);
+      expect(p.notes, isEmpty);
+    });
+  });
 }

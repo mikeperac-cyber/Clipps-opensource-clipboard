@@ -259,6 +259,7 @@ class DbHelper {
       ClipView.all => 'pinned DESC, created_at DESC, id DESC',
       ClipView.tasks => 'task_state ASC, created_at DESC, id DESC',
       ClipView.trash => 'deleted_at DESC, id DESC',
+      ClipView.notes => 'id DESC', // unused: the notes view lists notes
     };
     final rows = await _db.rawQuery(
       '$_select WHERE ${where.join(' AND ')} ORDER BY $order',
@@ -402,8 +403,8 @@ class DbHelper {
       id: id,
       clipId: clipId,
       body: body,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(ms),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(ms),
     );
   }
 

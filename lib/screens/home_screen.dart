@@ -32,6 +32,7 @@ String _viewTitle(ClipboardProvider p) {
     ClipView.all => 'All clips',
     ClipView.tasks => 'Tasks',
     ClipView.trash => 'Trash',
+    ClipView.notes => 'Notes',
   };
 }
 
@@ -220,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : switch (p.view) {
               ClipView.tasks => (Icons.checklist, 'No tasks yet'),
               ClipView.trash => (Icons.delete_outline, 'Trash is empty'),
+              ClipView.notes => (Icons.notes, 'No notes yet'),
               ClipView.all =>
                 p.groupId != null
                     ? (Icons.folder_open, 'No clips in this group')

@@ -454,6 +454,16 @@ void main() {
       expect(got.map((n) => n.id), [d.id, b.id, a.id]);
     });
 
+    test('addNote returns a note equal to its read-back', () async {
+      final c = await db.insertClip('x', t0);
+      final n = await db.addNote(
+        c.id,
+        'a',
+        DateTime(2026, 1, 1, 10, 0, 0, 5, 7),
+      );
+      expect((await db.notesForClip(c.id)).single, n);
+    });
+
     test('updateNote changes body and updated_at', () async {
       final c = await db.insertClip('x', t0);
       final n = await db.addNote(c.id, 'old', t0);
