@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../database/db_helper.dart';
 import '../models/clip_group.dart';
@@ -9,6 +11,7 @@ import '../models/clip_source.dart';
 import '../models/clip_view.dart';
 import '../models/clipboard_model.dart';
 import '../models/note.dart';
+import '../services/csv_export.dart';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show DatabaseException;
 
@@ -146,6 +149,16 @@ class ClipboardProvider extends ChangeNotifier {
     _capturePaused = await _db.getSetting('capture_paused') == 'true';
     await _reload();
     notifyListeners();
+  }
+
+  Future<String> exportClips() async {
+    final dir = await getDownloadsDirectory() ?? Directory(dataDir);
+    return exportClipsCsv(
+      _db,
+      {for (final g in _groups) g.id: g.name},
+      dir,
+      _clock(),
+    );
   }
 
   Future<void> setCapturePaused(bool paused) async {

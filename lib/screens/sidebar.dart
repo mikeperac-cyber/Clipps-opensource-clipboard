@@ -149,6 +149,27 @@ class Sidebar extends StatelessWidget {
                     } catch (_) {}
                   },
                 ),
+                Builder(
+                  builder: (ctx) => TextButton(
+                    key: const Key('exportClips'),
+                    child: const Text('Export clips'),
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(ctx);
+                      try {
+                        final path = await p.exportClips();
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('Exported to $path')),
+                        );
+                        // explorer exits non-zero even on success; ignore result
+                        await Process.run('explorer.exe', ['/select,', path]);
+                      } catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('Export failed: $e')),
+                        );
+                      }
+                    },
+                  ),
+                ),
               ],
             ),
           ),
