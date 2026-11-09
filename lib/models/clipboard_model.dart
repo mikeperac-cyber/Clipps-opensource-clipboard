@@ -18,6 +18,8 @@ class ClipboardModel {
   /// Auto tags in [kAutoTags] order, then manual tags A-Z.
   final List<String> tags;
 
+  final int noteCount;
+
   const ClipboardModel({
     required this.id,
     required this.content,
@@ -29,6 +31,7 @@ class ClipboardModel {
     this.taskState = TaskState.none,
     this.groupId,
     this.tags = const [],
+    this.noteCount = 0,
   });
 
   factory ClipboardModel.fromMap(Map<String, Object?> map) => ClipboardModel(
@@ -49,6 +52,7 @@ class ClipboardModel {
     },
     groupId: map['group_id'] as int?,
     tags: _sortTags(map['tags'] as String?),
+    noteCount: map['note_count'] as int? ?? 0,
   );
 
   static List<String> _sortTags(String? joined) {

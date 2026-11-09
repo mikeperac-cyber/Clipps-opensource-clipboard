@@ -17,6 +17,12 @@ void main() {
     expect(m.createdAt, DateTime.fromMillisecondsSinceEpoch(1700000000000));
   });
 
+  test('fromMap reads note_count and defaults to 0', () {
+    final base = {'id': 1, 'content': 'x', 'created_at': 1};
+    expect(ClipboardModel.fromMap(base).noteCount, 0);
+    expect(ClipboardModel.fromMap({...base, 'note_count': 4}).noteCount, 4);
+  });
+
   test('preview keeps short content as-is', () {
     expect(_clip('short').preview, 'short');
   });

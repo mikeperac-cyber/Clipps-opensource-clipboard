@@ -437,6 +437,96 @@ void main() {
     });
   });
 
+  group('notes and settings', () {
+    final t0 = DateTime(2026, 1, 1, 10);
+    final t1 = DateTime(2026, 1, 1, 11);
+    final t2 = DateTime(2026, 1, 1, 12);
+
+    test('addNote and notesForClip newest first', () async {
+      final c = await db.insertClip('x', t0);
+      final a = await db.addNote(c.id, 'first', t0);
+      final b = await db.addNote(c.id, 'second', t1);
+      final d = await db.addNote(c.id, 'third', t1);
+      expect(a.body, 'first');
+      expect(a.createdAt, t0);
+      expect(a.edited, isFalse);
+      final got = await db.notesForClip(c.id);
+      expect(got.map((n) => n.id), [d.id, b.id, a.id]);
+    });
+
+    test('updateNote changes body and updated_at', () async {
+      final c = await db.insertClip('x', t0);
+      final n = await db.addNote(c.id, 'old', t0);
+      expect(await db.updateNote(n.id, 'new', t1), isTrue);
+      final got = (await db.notesForClip(c.id)).single;
+      expect(got.body, 'new');
+      expect(got.createdAt, t0);
+      expect(got.updatedAt, t1);
+      expect(got.edited, isTrue);
+    });
+
+    test('updateNote with same text keeps updated_at', () async {
+      final c = await db.insertClip('x', t0);
+      final n = await db.addNote(c.id, 'same', t0);
+      expect(await db.updateNote(n.id, 'same', t2), isTrue);
+      expect((await db.notesForClip(c.id)).single.updatedAt, t0);
+    });
+
+    test('updateNote on a missing id returns false', () async {
+      expect(await db.updateNote(999, 'x', t0), isFalse);
+    });
+
+    test('deleteNote removes one note and returns 1', () async {
+      final c = await db.insertClip('x', t0);
+      final a = await db.addNote(c.id, 'a', t0);
+      await db.addNote(c.id, 'b', t1);
+      expect(await db.deleteNote(a.id), 1);
+      expect(await db.deleteNote(a.id), 0);
+      expect((await db.notesForClip(c.id)).single.body, 'b');
+    });
+
+    test(
+      'notesView excludes trashed clips and shows the clip fields',
+      () async {
+        final live = await db.insertClip('live clip', t0);
+        final gone = await db.insertClip('gone clip', t0);
+        await db.addNote(live.id, 'older', t0);
+        await db.addNote(live.id, 'newer', t1);
+        await db.addNote(gone.id, 'hidden', t2);
+        await db.trashClips([gone.id], t2);
+        final view = await db.notesView();
+        expect(view.map((e) => e.note.body), ['newer', 'older']);
+        expect(view.first.clip.id, live.id);
+        expect(view.first.clip.content, 'live clip');
+      },
+    );
+
+    test('getClips carries note_count', () async {
+      final a = await db.insertClip('a', t0);
+      final b = await db.insertClip('b', t1);
+      await db.addNote(a.id, 'n1', t0);
+      await db.addNote(a.id, 'n2', t0);
+      final got = {for (final c in await db.getClips()) c.id: c.noteCount};
+      expect(got, {a.id: 2, b.id: 0});
+    });
+
+    test('purge removes notes of purged clips', () async {
+      final c = await db.insertClip('x', t0);
+      await db.addNote(c.id, 'n', t0);
+      await db.trashClips([c.id], t0);
+      expect(await db.purgeTrashedBefore(t2), 1);
+      expect(await db.rawDb.query('notes'), isEmpty);
+    });
+
+    test('settings: null when absent, round-trip, overwrite', () async {
+      expect(await db.getSetting('theme'), isNull);
+      await db.setSetting('theme', 'dark');
+      expect(await db.getSetting('theme'), 'dark');
+      await db.setSetting('theme', 'light');
+      expect(await db.getSetting('theme'), 'light');
+    });
+  });
+
   group('file-backed upgrade safety', () {
     late Directory dir;
     late String path;
@@ -499,21 +589,66 @@ void main() {
       await h.close();
     });
 
-    test('backupBeforeUpgrade copies a v2 file once, skips v3', () async {
+    test('backupBeforeUpgrade copies a v2 file once, skips v4', () async {
       await makeV2();
-      final dest = p.join(dir.path, 'backups', 'clipps-pre-v3.db');
+      final dest = p.join(dir.path, 'backups', 'clipps-pre-v4.db');
       await DbHelper.backupBeforeUpgrade(databaseFactoryFfi, path);
       expect(File(dest).existsSync(), isTrue);
       File(dest).writeAsStringSync('marker');
       await DbHelper.backupBeforeUpgrade(databaseFactoryFfi, path);
       expect(File(dest).readAsStringSync(), 'marker');
 
-      // The upgraded file is v3 now: no new safety copy.
+      // The upgraded file is v4 now: no new safety copy.
       File(dest).deleteSync();
       final h = await DbHelper.open(databaseFactoryFfi, path);
       await h.close();
       await DbHelper.backupBeforeUpgrade(databaseFactoryFfi, path);
       expect(File(dest).existsSync(), isFalse);
+    });
+
+    test('upgrade v3 keeps every row and writes the pre-v4 copy', () async {
+      var h = await DbHelper.open(databaseFactoryFfi, path);
+      final a = await h.insertClip('mail me a@b.co', DateTime(2026));
+      await h.insertClip('two', DateTime(2026, 1, 2));
+      await h.setPinned(a.id, true);
+      await h.addTag(a.id, 'Work');
+      final g = await h.createGroup('G');
+      await h.setClipGroup(a.id, g.id);
+      await h.close();
+
+      final raw = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(),
+      );
+      await raw.execute('DROP TABLE notes');
+      await raw.execute('DROP TABLE settings');
+      await raw.execute('PRAGMA user_version = 3');
+      await raw.close();
+
+      await DbHelper.backupBeforeUpgrade(databaseFactoryFfi, path);
+      final copy = p.join(dir.path, 'backups', 'clipps-pre-v4.db');
+      expect(File(copy).existsSync(), isTrue);
+      final c = await databaseFactoryFfi.openDatabase(
+        copy,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await c.getVersion(), 3);
+      expect(await c.query('clips'), hasLength(2));
+      await c.close();
+
+      h = await DbHelper.open(databaseFactoryFfi, path);
+      final clips = await h.getClips();
+      expect(clips.length, 2);
+      final got = clips.firstWhere((x) => x.id == a.id);
+      expect(got.pinned, isTrue);
+      expect(got.tags, containsAll(['Email', 'Work']));
+      expect(got.noteCount, 0);
+      expect((await h.listGroups()).single.name, 'G');
+      expect(await h.rawDb.query('notes'), isEmpty);
+      expect(await h.getSetting('x'), isNull);
+      final v = await h.rawDb.rawQuery('PRAGMA user_version');
+      expect(v.single.values.single, 4);
+      await h.close();
     });
 
     test('purge + checkpoint runs on a file DB', () async {
