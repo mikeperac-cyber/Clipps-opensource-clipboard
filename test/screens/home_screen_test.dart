@@ -116,7 +116,9 @@ void main() {
       ),
     );
     await show(t, clips: [long]);
-    await t.tap(find.byKey(Key('clip-${p.clips.first.id}')));
+    // Tap the title area; the centre now lands on the wider button row.
+    final row = find.byKey(Key('clip-${p.clips.first.id}'));
+    await t.tapAt(t.getTopLeft(row) + const Offset(120, 20));
     await t.pump();
     expect(copied, [long]);
     expect(find.text('Copied'), findsOneWidget);
@@ -675,5 +677,71 @@ void main() {
     });
     await t.pump();
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('notes button shows count and opens the dialog', (t) async {
+    await show(t, clips: ['a', 'b']);
+    final a = p.clips.firstWhere((c) => c.content == 'a').id;
+    final b = p.clips.firstWhere((c) => c.content == 'b').id;
+    await t.runAsync(() async {
+      await p.addNote(a, 'n1');
+      await p.addNote(a, 'n2');
+      await p.load();
+    });
+    await t.pump();
+    expect(find.byTooltip('Notes (2)'), findsOneWidget);
+    expect(find.byTooltip('Notes'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(Key('notesButton-$a')),
+        matching: find.byIcon(Icons.sticky_note_2),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(Key('notesButton-$b')),
+        matching: find.byIcon(Icons.sticky_note_2_outlined),
+      ),
+      findsOneWidget,
+    );
+    await t.tap(find.byKey(Key('notesButton-$a')));
+    await settle(t);
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('noteInput')), findsOneWidget);
+    expect(find.text('n1'), findsOneWidget);
+  });
+
+  testWidgets(
+    'Notes view lists notes with their clip; empty state; tap opens',
+    (t) async {
+      await show(t, clips: ['a clip']);
+      final clipId = p.clips.first.id;
+      await tapKey(t, 'view-notes');
+      expect(find.text('No notes yet'), findsOneWidget);
+      expect(find.byKey(const Key('manualInput')), findsNothing);
+      expect(find.byKey(const Key('search')), findsNothing);
+      expect(find.byKey(const Key('selectAll')), findsNothing);
+      expect(find.byKey(const Key('deleteSelected')), findsNothing);
+      await t.runAsync(() => p.addNote(clipId, 'my note'));
+      await tapKey(t, 'view-all');
+      await tapKey(t, 'view-notes');
+      expect(find.text('Notes'), findsWidgets);
+      expect(find.text('my note'), findsOneWidget);
+      expect(find.text('a clip'), findsOneWidget);
+      await t.tap(find.text('my note'));
+      await settle(t);
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('noteInput')), findsOneWidget);
+    },
+  );
+
+  testWidgets('notes button is absent on Trash rows', (t) async {
+    await show(t, clips: ['a']);
+    final id = p.clips.first.id;
+    await t.runAsync(() => p.trashClip(id));
+    await tapKey(t, 'view-trash');
+    expect(find.byKey(Key('restore-$id')), findsOneWidget);
+    expect(find.byKey(Key('notesButton-$id')), findsNothing);
   });
 }

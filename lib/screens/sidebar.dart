@@ -41,6 +41,12 @@ class Sidebar extends StatelessWidget {
                 ),
                 item('view-tasks', Icons.checklist, 'Tasks', ClipView.tasks),
                 item(
+                  'view-notes',
+                  Icons.sticky_note_2_outlined,
+                  'Notes',
+                  ClipView.notes,
+                ),
+                item(
                   'view-trash',
                   Icons.delete_outline,
                   'Trash',

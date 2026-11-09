@@ -7,6 +7,7 @@ import '../models/clipboard_model.dart';
 import '../providers/clipboard_provider.dart';
 import 'dialogs.dart';
 import 'format.dart';
+import 'notes_dialog.dart';
 
 Future<bool> confirmTrash(BuildContext context, int count) async {
   final ok = await showDialog<bool>(
@@ -159,6 +160,19 @@ class _ClipRowState extends State<ClipRow> {
                     ),
                     onPressed: () => setState(() => _revealed = !_revealed),
                   ),
+                IconButton(
+                  key: Key('notesButton-${clip.id}'),
+                  tooltip: clip.noteCount > 0
+                      ? 'Notes (${clip.noteCount})'
+                      : 'Notes',
+                  color: muted,
+                  icon: Icon(
+                    clip.noteCount > 0
+                        ? Icons.sticky_note_2
+                        : Icons.sticky_note_2_outlined,
+                  ),
+                  onPressed: () => showNotesDialog(context, clip),
+                ),
                 IconButton(
                   key: Key('pin-${clip.id}'),
                   tooltip: pinned ? 'Unpin' : 'Pin',

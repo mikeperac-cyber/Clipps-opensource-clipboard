@@ -7,6 +7,7 @@ import '../models/clip_view.dart';
 import '../providers/clipboard_provider.dart';
 import 'clip_row.dart';
 import 'format.dart';
+import 'notes_dialog.dart';
 import 'sidebar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -60,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
         p.searchText.isNotEmpty || range != null || p.tagFilter != null;
     final selected = p.selectedIds;
     final trash = p.view == ClipView.trash;
+    final notesView = p.view == ClipView.notes;
     final canSelectAll = p.clips.any((c) => !c.pinned);
 
     return Scaffold(
@@ -67,40 +69,42 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(
           selected.isEmpty ? _viewTitle(p) : '${selected.length} selected',
         ),
-        actions: [
-          if (selected.isNotEmpty)
-            IconButton(
-              key: const Key('clearSelection'),
-              icon: const Icon(Icons.close),
-              tooltip: 'Clear selection',
-              onPressed: p.clearSelection,
-            ),
-          IconButton(
-            key: const Key('selectAll'),
-            icon: const Icon(Icons.select_all),
-            tooltip: 'Select all',
-            onPressed: canSelectAll ? p.selectAllVisible : null,
-          ),
-          if (trash)
-            IconButton(
-              key: const Key('restoreSelected'),
-              icon: const Icon(Icons.restore),
-              tooltip: 'Restore selected',
-              onPressed: selected.isEmpty ? null : p.restoreSelected,
-            )
-          else
-            IconButton(
-              key: const Key('deleteSelected'),
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Move to Trash',
-              onPressed: selected.isEmpty
-                  ? null
-                  : () => confirmTrash(
-                      context,
-                      selected.length,
-                    ).then((ok) => ok ? p.trashSelected() : null),
-            ),
-        ],
+        actions: notesView
+            ? null
+            : [
+                if (selected.isNotEmpty)
+                  IconButton(
+                    key: const Key('clearSelection'),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Clear selection',
+                    onPressed: p.clearSelection,
+                  ),
+                IconButton(
+                  key: const Key('selectAll'),
+                  icon: const Icon(Icons.select_all),
+                  tooltip: 'Select all',
+                  onPressed: canSelectAll ? p.selectAllVisible : null,
+                ),
+                if (trash)
+                  IconButton(
+                    key: const Key('restoreSelected'),
+                    icon: const Icon(Icons.restore),
+                    tooltip: 'Restore selected',
+                    onPressed: selected.isEmpty ? null : p.restoreSelected,
+                  )
+                else
+                  IconButton(
+                    key: const Key('deleteSelected'),
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Move to Trash',
+                    onPressed: selected.isEmpty
+                        ? null
+                        : () => confirmTrash(
+                            context,
+                            selected.length,
+                          ).then((ok) => ok ? p.trashSelected() : null),
+                  ),
+              ],
       ),
       body: Row(
         children: [
@@ -124,10 +128,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
-                    if (!trash) const _ManualInput(),
-                    _searchRow(context, p, range),
-                    if (p.tagsInUse.isNotEmpty) _tagRow(p),
-                    Expanded(child: _list(p, filtered)),
+                    if (!trash && !notesView) const _ManualInput(),
+                    if (!notesView) _searchRow(context, p, range),
+                    if (!notesView && p.tagsInUse.isNotEmpty) _tagRow(p),
+                    Expanded(
+                      child: notesView ? _notesList(p) : _list(p, filtered),
+                    ),
                   ],
                 ),
               ),
@@ -213,6 +219,57 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ),
   );
+
+  Widget _notesList(ClipboardProvider p) {
+    if (p.notes.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.notes, size: 40, color: Colors.grey),
+            SizedBox(height: 8),
+            Text('No notes yet'),
+          ],
+        ),
+      );
+    }
+    final now = p.now();
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return ListView.builder(
+      itemCount: p.notes.length,
+      itemBuilder: (context, i) {
+        final e = p.notes[i];
+        final label = e.clip.sourceLabel;
+        return Card(
+          key: Key('noteCard-${e.note.id}'),
+          margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+          child: ListTile(
+            onTap: () => showNotesDialog(context, e.clip),
+            title: Text(
+              e.note.body,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  e.clip.preview,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${relativeTime(e.note.updatedAt, now)}'
+                  '${label == null ? '' : ' · $label'}',
+                  style: TextStyle(fontSize: 12, color: muted),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   Widget _list(ClipboardProvider p, bool filtered) {
     if (p.clips.isEmpty) {
