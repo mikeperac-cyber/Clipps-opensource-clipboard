@@ -27,59 +27,107 @@ class Sidebar extends StatelessWidget {
         );
     return SizedBox(
       width: width,
-      child: ListView(
-        padding: const EdgeInsets.all(8),
+      child: Column(
         children: [
-          item('view-all', Icons.inbox_outlined, 'All clips', ClipView.all),
-          item('view-tasks', Icons.checklist, 'Tasks', ClipView.tasks),
-          item('view-trash', Icons.delete_outline, 'Trash', ClipView.trash),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-            child: Text(
-              'Groups',
-              style: TextStyle(fontWeight: FontWeight.w600),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(8),
+              children: [
+                item(
+                  'view-all',
+                  Icons.inbox_outlined,
+                  'All clips',
+                  ClipView.all,
+                ),
+                item('view-tasks', Icons.checklist, 'Tasks', ClipView.tasks),
+                item(
+                  'view-trash',
+                  Icons.delete_outline,
+                  'Trash',
+                  ClipView.trash,
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Text(
+                    'Groups',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                for (final g in p.groups)
+                  ListTile(
+                    key: Key('group-item-${g.id}'),
+                    dense: true,
+                    leading: const Icon(Icons.folder_outlined),
+                    title: Text(
+                      g.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    selected: p.groupId == g.id,
+                    selectedTileColor: Theme.of(context)
+                        .colorScheme
+                        .secondaryContainer
+                        .withValues(alpha: 0.5),
+                    shape: const StadiumBorder(),
+                    onTap: () => p.selectGroup(g.id),
+                    trailing: PopupMenuButton<String>(
+                      key: Key('groupMenu-${g.id}'),
+                      icon: const Icon(Icons.more_vert, size: 18),
+                      onSelected: (v) => v == 'rename'
+                          ? showGroupNameDialog(
+                              context,
+                              title: 'Rename group',
+                              initial: g.name,
+                              submit: (n) => p.renameGroup(g.id, n),
+                            )
+                          : p.deleteGroup(g.id),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'rename', child: Text('Rename')),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete group'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ListTile(
+                  key: const Key('newGroup'),
+                  dense: true,
+                  leading: const Icon(Icons.add),
+                  title: const Text('New group'),
+                  shape: const StadiumBorder(),
+                  onTap: () => showGroupNameDialog(
+                    context,
+                    title: 'New group',
+                    submit: p.createGroup,
+                  ),
+                ),
+              ],
             ),
           ),
-          for (final g in p.groups)
-            ListTile(
-              key: Key('group-item-${g.id}'),
-              dense: true,
-              leading: const Icon(Icons.folder_outlined),
-              title: Text(g.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-              selected: p.groupId == g.id,
-              selectedTileColor: Theme.of(context)
-                  .colorScheme
-                  .secondaryContainer
-                  .withValues(alpha: 0.5),
-              shape: const StadiumBorder(),
-              onTap: () => p.selectGroup(g.id),
-              trailing: PopupMenuButton<String>(
-                key: Key('groupMenu-${g.id}'),
-                icon: const Icon(Icons.more_vert, size: 18),
-                onSelected: (v) => v == 'rename'
-                    ? showGroupNameDialog(
-                        context,
-                        title: 'Rename group',
-                        initial: g.name,
-                        submit: (n) => p.renameGroup(g.id, n),
-                      )
-                    : p.deleteGroup(g.id),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'rename', child: Text('Rename')),
-                  PopupMenuItem(value: 'delete', child: Text('Delete group')),
-                ],
-              ),
-            ),
-          ListTile(
-            key: const Key('newGroup'),
-            dense: true,
-            leading: const Icon(Icons.add),
-            title: const Text('New group'),
-            shape: const StadiumBorder(),
-            onTap: () => showGroupNameDialog(
-              context,
-              title: 'New group',
-              submit: p.createGroup,
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: SegmentedButton<ThemeMode>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: ThemeMode.system,
+                  icon: Icon(Icons.brightness_auto),
+                  tooltip: 'System',
+                ),
+                ButtonSegment(
+                  value: ThemeMode.light,
+                  icon: Icon(Icons.light_mode),
+                  tooltip: 'Light',
+                ),
+                ButtonSegment(
+                  value: ThemeMode.dark,
+                  icon: Icon(Icons.dark_mode),
+                  tooltip: 'Dark',
+                ),
+              ],
+              selected: {p.themeMode},
+              onSelectionChanged: (s) => p.setThemeMode(s.first),
             ),
           ),
         ],

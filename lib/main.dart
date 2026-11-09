@@ -9,24 +9,18 @@ import 'providers/clipboard_provider.dart';
 import 'screens/home_screen.dart';
 import 'services/backup_service.dart';
 import 'services/clipboard_watcher.dart';
+import 'theme/app_theme.dart';
 
 class ClippsApp extends StatelessWidget {
   const ClippsApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    ThemeData theme(Brightness b) => ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF5B5BD6),
-        brightness: b,
-      ),
-    );
     return MaterialApp(
       title: 'Clipps',
-      theme: theme(Brightness.light),
-      darkTheme: theme(Brightness.dark),
-      themeMode: ThemeMode.system,
+      theme: appTheme(Brightness.light),
+      darkTheme: appTheme(Brightness.dark),
+      themeMode: context.watch<ClipboardProvider>().themeMode,
       home: const HomeScreen(),
     );
   }
