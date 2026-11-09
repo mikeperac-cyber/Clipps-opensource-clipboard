@@ -782,4 +782,94 @@ void main() {
     expect(find.text('password123'), findsNothing);
     expect(find.textContaining('\u2022'), findsOneWidget);
   });
+
+  group('quick copy and first-run hint', () {
+    String? copied;
+    late List<String> nativeCalls;
+
+    void mockChannels(WidgetTester t, {bool native = true}) {
+      copied = null;
+      nativeCalls = [];
+      final m = t.binding.defaultBinaryMessenger;
+      m.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      });
+      if (native) {
+        m.setMockMethodCallHandler(const MethodChannel('clipps/clipboard'), (
+          call,
+        ) async {
+          nativeCalls.add(call.method);
+          return null;
+        });
+      }
+      addTearDown(() {
+        m.setMockMethodCallHandler(SystemChannels.platform, null);
+        m.setMockMethodCallHandler(
+          const MethodChannel('clipps/clipboard'),
+          null,
+        );
+      });
+    }
+
+    testWidgets('enter copies the top clip and hides the window', (t) async {
+      mockChannels(t);
+      await show(t, clips: ['older', 'newest full text']);
+      await t.enterText(find.byKey(const Key('search')), '');
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await settle(t);
+      expect(copied, 'newest full text');
+      expect(nativeCalls, ['hideWindow']);
+    });
+
+    testWidgets('enter with no results does nothing', (t) async {
+      mockChannels(t);
+      await show(t, clips: ['abc']);
+      await t.enterText(find.byKey(const Key('search')), 'zzz');
+      await settle(t);
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await settle(t);
+      expect(copied, isNull);
+      expect(nativeCalls, isEmpty);
+    });
+
+    testWidgets('enter copies even without a native hide handler', (t) async {
+      mockChannels(t, native: false);
+      await show(t, clips: ['x']);
+      await t.enterText(find.byKey(const Key('search')), '');
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await settle(t);
+      expect(t.takeException(), isNull);
+      expect(copied, 'x');
+    });
+
+    testWidgets('escape hides the window', (t) async {
+      mockChannels(t);
+      await show(t);
+      await t.pump(); // autofocus lands after the first frame
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(t);
+      expect(nativeCalls, ['hideWindow']);
+    });
+
+    testWidgets('empty history explains how to start', (t) async {
+      await show(t);
+      expect(find.text('No clips yet'), findsOneWidget);
+      expect(
+        find.text(
+          'Copy any text and it appears here. '
+          'Press Ctrl+Alt+. to open Clipps from anywhere.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('hint drops the shortcut when it is unavailable', (t) async {
+      p.markHotkeyUnavailable();
+      await show(t);
+      expect(find.text('Copy any text and it appears here.'), findsOneWidget);
+    });
+  });
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/clip_view.dart';
@@ -37,6 +38,18 @@ String _viewTitle(ClipboardProvider p) {
   };
 }
 
+/// Hides the window via the native runner; a no-op where there is none (tests).
+Future<void> _hideWindow() async {
+  try {
+    await const MethodChannel('clipps/clipboard')
+        .invokeMethod<void>('hideWindow');
+  } on MissingPluginException {
+    // No native side.
+  } on PlatformException {
+    // Nothing more to do.
+  }
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   Timer? _tick;
 
@@ -64,93 +77,100 @@ class _HomeScreenState extends State<HomeScreen> {
     final notesView = p.view == ClipView.notes;
     final canSelectAll = p.clips.any((c) => !c.pinned);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          selected.isEmpty ? _viewTitle(p) : '${selected.length} selected',
-        ),
-        actions: notesView
-            ? null
-            : [
-                if (selected.isNotEmpty)
-                  IconButton(
-                    key: const Key('clearSelection'),
-                    icon: const Icon(Icons.close),
-                    tooltip: 'Clear selection',
-                    onPressed: p.clearSelection,
-                  ),
-                IconButton(
-                  key: const Key('selectAll'),
-                  icon: const Icon(Icons.select_all),
-                  tooltip: 'Select all',
-                  onPressed: canSelectAll ? p.selectAllVisible : null,
-                ),
-                if (trash)
-                  IconButton(
-                    key: const Key('restoreSelected'),
-                    icon: const Icon(Icons.restore),
-                    tooltip: 'Restore selected',
-                    onPressed: selected.isEmpty ? null : p.restoreSelected,
-                  )
-                else
-                  IconButton(
-                    key: const Key('deleteSelected'),
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Move to Trash',
-                    onPressed: selected.isEmpty
-                        ? null
-                        : () => confirmTrash(
-                            context,
-                            selected.length,
-                          ).then((ok) => ok ? p.trashSelected() : null),
-                  ),
-              ],
-      ),
-      body: Row(
-        children: [
-          const Sidebar(),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1100),
-                child: Column(
-                  children: [
-                    if (p.hotkeyUnavailable)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                        child: Text(
-                          'Shortcut Ctrl+Alt+. is already used by another app',
-                          key: const Key('hotkeyWarning'),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
+    // Focus sits inside the shortcuts so Esc bubbles up to them.
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _hideWindow},
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(
+              selected.isEmpty ? _viewTitle(p) : '${selected.length} selected',
+            ),
+            actions: notesView
+                ? null
+                : [
+                    if (selected.isNotEmpty)
+                      IconButton(
+                        key: const Key('clearSelection'),
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Clear selection',
+                        onPressed: p.clearSelection,
                       ),
-                    if (p.capturePaused)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                        child: Text(
-                          'Capture is paused. New copies are not saved.',
-                          key: const Key('pausedBanner'),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.tertiary,
-                          ),
-                        ),
-                      ),
-                    if (!trash && !notesView) const _ManualInput(),
-                    if (!notesView) _searchRow(context, p, range),
-                    if (!notesView && p.tagsInUse.isNotEmpty) _tagRow(p),
-                    Expanded(
-                      child: notesView ? _notesList(p) : _list(p, filtered),
+                    IconButton(
+                      key: const Key('selectAll'),
+                      icon: const Icon(Icons.select_all),
+                      tooltip: 'Select all',
+                      onPressed: canSelectAll ? p.selectAllVisible : null,
                     ),
+                    if (trash)
+                      IconButton(
+                        key: const Key('restoreSelected'),
+                        icon: const Icon(Icons.restore),
+                        tooltip: 'Restore selected',
+                        onPressed: selected.isEmpty ? null : p.restoreSelected,
+                      )
+                    else
+                      IconButton(
+                        key: const Key('deleteSelected'),
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: 'Move to Trash',
+                        onPressed: selected.isEmpty
+                            ? null
+                            : () => confirmTrash(
+                                context,
+                                selected.length,
+                              ).then((ok) => ok ? p.trashSelected() : null),
+                      ),
                   ],
+          ),
+          body: Row(
+            children: [
+              const Sidebar(),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: Column(
+                      children: [
+                        if (p.hotkeyUnavailable)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                            child: Text(
+                              'Shortcut Ctrl+Alt+. is already used by another app',
+                              key: const Key('hotkeyWarning'),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        if (p.capturePaused)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                            child: Text(
+                              'Capture is paused. New copies are not saved.',
+                              key: const Key('pausedBanner'),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.tertiary,
+                              ),
+                            ),
+                          ),
+                        if (!trash && !notesView) const _ManualInput(),
+                        if (!notesView) _searchRow(context, p, range),
+                        if (!notesView && p.tagsInUse.isNotEmpty) _tagRow(p),
+                        Expanded(
+                          child: notesView ? _notesList(p) : _list(p, filtered),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -168,6 +188,11 @@ class _HomeScreenState extends State<HomeScreen> {
             initialText: p.searchText,
             focusRequests: p.searchFocusRequests,
             onChanged: p.setSearchText,
+            onSubmitted: (_) {
+              if (p.view == ClipView.trash || p.clips.isEmpty) return;
+              Clipboard.setData(ClipboardData(text: p.clips.first.content));
+              _hideWindow();
+            },
           ),
         ),
         const SizedBox(width: 8),
@@ -311,6 +336,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 8),
             Text(text),
+            if (!filtered && p.view == ClipView.all && p.groupId == null) ...[
+              const SizedBox(height: 4),
+              Text(
+                p.hotkeyUnavailable
+                    ? 'Copy any text and it appears here.'
+                    : 'Copy any text and it appears here. '
+                          'Press Ctrl+Alt+. to open Clipps from anywhere.',
+                key: const Key('emptyHint'),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
         ),
       );
@@ -403,11 +439,13 @@ class _SearchField extends StatefulWidget {
     required this.initialText,
     required this.focusRequests,
     required this.onChanged,
+    required this.onSubmitted,
   });
 
   final String initialText;
   final int focusRequests;
   final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
 
   @override
   State<_SearchField> createState() => _SearchFieldState();
@@ -450,6 +488,7 @@ class _SearchFieldState extends State<_SearchField> {
         prefixIcon: Icon(Icons.search),
       ),
       onChanged: widget.onChanged,
+      onSubmitted: widget.onSubmitted,
     );
   }
 }

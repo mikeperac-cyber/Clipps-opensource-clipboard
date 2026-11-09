@@ -141,6 +141,9 @@ bool FlutterWindow::OnCreate() {
             Shell_NotifyIcon(NIM_MODIFY, &tray_icon_);
           }
           result->Success();
+        } else if (call.method_name() == "hideWindow") {
+          ShowWindow(GetHandle(), SW_HIDE);
+          result->Success();
         } else {
           result->NotImplemented();
         }
