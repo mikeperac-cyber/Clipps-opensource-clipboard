@@ -744,4 +744,17 @@ void main() {
     expect(find.byKey(Key('restore-$id')), findsOneWidget);
     expect(find.byKey(Key('notesButton-$id')), findsNothing);
   });
+
+  testWidgets('Notes view masks the preview of a secret clip', (t) async {
+    await show(t, clips: ['password123']);
+    final id = p.clips.first.id;
+    await t.runAsync(() async {
+      await p.addTag(id, 'Secret');
+      await p.addNote(id, 'my note');
+    });
+    await tapKey(t, 'view-notes');
+    expect(find.text('my note'), findsOneWidget);
+    expect(find.text('password123'), findsNothing);
+    expect(find.textContaining('\u2022'), findsOneWidget);
+  });
 }

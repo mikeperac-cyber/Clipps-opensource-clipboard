@@ -97,8 +97,15 @@ void main() {
     await t.pump();
     await t.tap(find.byKey(const Key('addNote')));
     await settle(t);
-    expect(find.text('Notes are limited to 20,000 characters'), findsOneWidget);
+    String? err() => t
+        .widget<TextField>(find.byKey(const Key('noteInput')))
+        .decoration!
+        .errorText;
+    expect(err(), 'Notes are limited to 20,000 characters');
     expect(find.textContaining('xxxx'), findsOneWidget); // text kept
+    await t.enterText(find.byKey(const Key('noteInput')), 'ok');
+    await t.pump();
+    expect(err(), isNull);
   });
 
   testWidgets('dialog shows the full clip text', (t) async {
@@ -106,5 +113,73 @@ void main() {
     await open(t, long);
     expect(find.byType(SelectableText), findsOneWidget);
     expect(t.widget<SelectableText>(find.byType(SelectableText)).data, long);
+  });
+
+  testWidgets('secret clip is masked until Reveal, then hidden again', (
+    t,
+  ) async {
+    await t.runAsync(() async {
+      await p.addClip('password123');
+      await p.load();
+      await p.addTag(p.clips.first.id, 'Secret');
+      await p.load();
+    });
+    await t.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: p,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (c) => TextButton(
+                key: const Key('open'),
+                onPressed: () => showNotesDialog(c, p.clips.first),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await t.tap(find.byKey(const Key('open')));
+    await settle(t);
+    expect(find.text('password123'), findsNothing);
+    expect(
+      find.text('pass\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'),
+      findsOneWidget,
+    );
+    await t.tap(find.byKey(const Key('revealClip')));
+    await t.pump();
+    expect(find.text('password123'), findsOneWidget);
+    await t.tap(find.byKey(const Key('revealClip')));
+    await t.pump();
+    expect(find.text('password123'), findsNothing);
+  });
+
+  testWidgets('empty state, timestamp format, blank edit disables save', (
+    t,
+  ) async {
+    await open(t, 'clip');
+    expect(find.text('No notes for this clip yet'), findsOneWidget);
+    await t.enterText(find.byKey(const Key('noteInput')), 'first');
+    await t.pump();
+    await t.tap(find.byKey(const Key('addNote')));
+    await settle(t);
+    expect(find.text('No notes for this clip yet'), findsNothing);
+    final stamp = RegExp(r'^Created \d{4}-\d{2}-\d{2} \d{2}:\d{2}$');
+    expect(
+      find.byWidgetPredicate((w) => w is Text && stamp.hasMatch(w.data ?? '')),
+      findsOneWidget,
+    );
+    final id = (await t.runAsync(() => p.notesFor(p.clips.first.id)))!
+        .single
+        .id;
+    await t.tap(find.byKey(Key('editNote-$id')));
+    await t.pump();
+    await t.enterText(find.byKey(Key('noteEdit-$id')), '  ');
+    await t.pump();
+    expect(
+      t.widget<FilledButton>(find.byKey(Key('saveNote-$id'))).onPressed,
+      isNull,
+    );
   });
 }

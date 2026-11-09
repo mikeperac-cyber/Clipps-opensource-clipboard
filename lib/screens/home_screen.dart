@@ -254,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  e.clip.preview,
+                  e.clip.isSecret ? maskSecret(e.clip.preview) : e.clip.preview,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),

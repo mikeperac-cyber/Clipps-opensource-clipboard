@@ -6,20 +6,21 @@ import '../models/note.dart';
 import '../providers/clipboard_provider.dart';
 import 'format.dart';
 
-Future<void> showNotesDialog(BuildContext context, ClipboardModel clip) {
-  // The dialog has no Scaffold of its own, so messages go to the page's.
-  final messenger = ScaffoldMessenger.of(context);
-  return showDialog<void>(
-    context: context,
-    builder: (_) => _NotesDialog(clip: clip, messenger: messenger),
-  );
-}
+Future<void> showNotesDialog(BuildContext context, ClipboardModel clip) =>
+    showDialog<void>(
+      context: context,
+      builder: (_) => _NotesDialog(clip: clip),
+    );
+
+const _tooLongCopy = 'Notes are limited to 20,000 characters';
+
+/// Local `YYYY-MM-DD HH:mm`.
+String _stamp(DateTime t) => t.toLocal().toString().substring(0, 16);
 
 class _NotesDialog extends StatefulWidget {
-  const _NotesDialog({required this.clip, required this.messenger});
+  const _NotesDialog({required this.clip});
 
   final ClipboardModel clip;
-  final ScaffoldMessengerState messenger;
 
   @override
   State<_NotesDialog> createState() => _NotesDialogState();
@@ -29,14 +30,19 @@ class _NotesDialogState extends State<_NotesDialog> {
   final _input = TextEditingController();
   final _edit = TextEditingController();
   List<Note> _notes = [];
+  bool _loaded = false;
+  bool _revealed = false;
   int? _editing;
+  String? _inputError;
+  String? _editError;
 
   ClipboardProvider get _p => context.read<ClipboardProvider>();
 
   @override
   void initState() {
     super.initState();
-    _input.addListener(() => setState(() {}));
+    _input.addListener(() => setState(() => _inputError = null));
+    _edit.addListener(() => setState(() => _editError = null));
     _reload();
   }
 
@@ -49,12 +55,17 @@ class _NotesDialogState extends State<_NotesDialog> {
 
   Future<void> _reload() async {
     final notes = await _p.notesFor(widget.clip.id);
-    if (mounted) setState(() => _notes = notes);
+    if (mounted) {
+      setState(() {
+        _notes = notes;
+        _loaded = true;
+      });
+    }
   }
 
   /// True when the save went through. `missing` (clip or note purged) closes
-  /// the dialog quietly; `tooLong` keeps the typed text.
-  Future<bool> _finish(NoteResult r) async {
+  /// the dialog quietly; `tooLong` keeps the typed text and flags the field.
+  Future<bool> _finish(NoteResult r, {required bool edit}) async {
     if (!mounted) return false;
     switch (r) {
       case NoteResult.saved:
@@ -63,11 +74,13 @@ class _NotesDialogState extends State<_NotesDialog> {
       case NoteResult.missing:
         Navigator.pop(context);
       case NoteResult.tooLong:
-        widget.messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Notes are limited to 20,000 characters'),
-          ),
-        );
+        setState(() {
+          if (edit) {
+            _editError = _tooLongCopy;
+          } else {
+            _inputError = _tooLongCopy;
+          }
+        });
       case NoteResult.blank:
         break;
     }
@@ -76,12 +89,14 @@ class _NotesDialogState extends State<_NotesDialog> {
 
   Future<void> _add() async {
     final r = await _p.addNote(widget.clip.id, _input.text);
-    if (await _finish(r)) _input.clear();
+    if (await _finish(r, edit: false)) _input.clear();
   }
 
   Future<void> _save(int id) async {
     final r = await _p.editNote(id, _edit.text);
-    if (await _finish(r) && mounted) setState(() => _editing = null);
+    if (await _finish(r, edit: true) && mounted) {
+      setState(() => _editing = null);
+    }
   }
 
   Future<void> _delete(int id) async {
@@ -104,11 +119,10 @@ class _NotesDialogState extends State<_NotesDialog> {
     );
     if (ok != true || !mounted) return;
     await _p.deleteNote(id);
-    await _reload();
+    if (mounted) await _reload();
   }
 
   Widget _noteTile(Note n) {
-    final now = DateTime.now();
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     if (_editing == n.id) {
       return Column(
@@ -120,6 +134,7 @@ class _NotesDialogState extends State<_NotesDialog> {
             autofocus: true,
             minLines: 1,
             maxLines: 6,
+            decoration: InputDecoration(errorText: _editError),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -130,7 +145,7 @@ class _NotesDialogState extends State<_NotesDialog> {
               ),
               FilledButton(
                 key: Key('saveNote-${n.id}'),
-                onPressed: () => _save(n.id),
+                onPressed: _edit.text.trim().isEmpty ? null : () => _save(n.id),
                 child: const Text('Save'),
               ),
             ],
@@ -142,8 +157,8 @@ class _NotesDialogState extends State<_NotesDialog> {
       contentPadding: EdgeInsets.zero,
       title: Text(n.body),
       subtitle: Text(
-        'Created ${relativeTime(n.createdAt, now)}'
-        '${n.edited ? ' · edited ${relativeTime(n.updatedAt, now)}' : ''}',
+        'Created ${_stamp(n.createdAt)}'
+        '${n.edited ? ' · edited ${_stamp(n.updatedAt)}' : ''}',
         style: TextStyle(fontSize: 12, color: muted),
       ),
       trailing: Row(
@@ -155,6 +170,7 @@ class _NotesDialogState extends State<_NotesDialog> {
             icon: const Icon(Icons.edit_outlined),
             onPressed: () => setState(() {
               _editing = n.id;
+              _editError = null;
               _edit.text = n.body;
             }),
           ),
@@ -186,11 +202,36 @@ class _NotesDialogState extends State<_NotesDialog> {
                 border: Border.all(color: Theme.of(context).dividerColor),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: SingleChildScrollView(
-                child: SelectableText(widget.clip.content),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        widget.clip.isSecret && !_revealed
+                            ? maskSecret(widget.clip.content)
+                            : widget.clip.content,
+                      ),
+                    ),
+                  ),
+                  if (widget.clip.isSecret)
+                    IconButton(
+                      key: const Key('revealClip'),
+                      tooltip: _revealed ? 'Hide' : 'Reveal',
+                      icon: Icon(
+                        _revealed ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () => setState(() => _revealed = !_revealed),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
+            if (_loaded && _notes.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('No notes for this clip yet'),
+              ),
             Flexible(
               child: ListView(
                 shrinkWrap: true,
@@ -203,7 +244,10 @@ class _NotesDialogState extends State<_NotesDialog> {
               controller: _input,
               minLines: 1,
               maxLines: 6,
-              decoration: const InputDecoration(hintText: 'Write a note'),
+              decoration: InputDecoration(
+                hintText: 'Write a note',
+                errorText: _inputError,
+              ),
             ),
             const SizedBox(height: 8),
             Align(
