@@ -845,6 +845,43 @@ void main() {
       expect(copied, 'x');
     });
 
+    testWidgets('enter right after typing copies the new top match', (t) async {
+      mockChannels(t);
+      await show(t, clips: ['older apple', 'newest banana']);
+      await t.enterText(find.byKey(const Key('search')), 'apple');
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await settle(t);
+      expect(copied, 'older apple');
+      expect(nativeCalls, ['hideWindow']);
+    });
+
+    testWidgets('enter in Trash neither copies nor hides', (t) async {
+      mockChannels(t);
+      await show(t, clips: ['a']);
+      await t.runAsync(() => p.trashClip(p.clips.first.id));
+      await openView(t, 'view-trash');
+      await t.tap(find.byKey(const Key('search')));
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await settle(t);
+      expect(copied, isNull);
+      expect(nativeCalls, isEmpty);
+    });
+
+    testWidgets('escape still hides after the search box loses focus', (
+      t,
+    ) async {
+      mockChannels(t);
+      await show(t);
+      await t.pump();
+      await t.tap(find.byKey(const Key('search')));
+      await t.pump();
+      FocusManager.instance.primaryFocus?.unfocus();
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(t);
+      expect(nativeCalls, ['hideWindow']);
+    });
+
     testWidgets('escape hides the window', (t) async {
       mockChannels(t);
       await show(t);

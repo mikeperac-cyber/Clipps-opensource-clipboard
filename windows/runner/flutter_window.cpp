@@ -259,6 +259,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   if (message == WM_CLIPBOARDUPDATE) {
+    // A copy made from Clipps itself is not a new clip.
+    DWORD owner_pid = 0;
+    GetWindowThreadProcessId(GetClipboardOwner(), &owner_pid);
+    if (owner_pid == GetCurrentProcessId()) return 0;
     // Wait for the writer to release the clipboard; also coalesces bursts.
     clipboard_attempts_ = 0;
     // Must be read now; the owner and foreground window change quickly.

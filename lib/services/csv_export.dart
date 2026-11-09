@@ -12,7 +12,7 @@ String _stamp(DateTime d) =>
 
 String _field(String s) {
   // A leading ' stops spreadsheets from running the text as a formula.
-  final safe = '=+-@'.contains(s.isEmpty ? ' ' : s[0]) ? "'$s" : s;
+  final safe = '=+-@\t\r'.contains(s.isEmpty ? ' ' : s[0]) ? "'$s" : s;
   return '"${safe.replaceAll('"', '""')}"';
 }
 

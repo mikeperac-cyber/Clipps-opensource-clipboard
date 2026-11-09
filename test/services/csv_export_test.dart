@@ -41,6 +41,7 @@ void main() {
       clipsToCsv([clip(content: '=HYPERLINK("x")')], {}),
       contains('"\'=HYPERLINK(""x"")"'),
     );
+    expect(clipsToCsv([clip(content: '\tx')], {}), contains('"\'\tx"'));
   });
 
   test('csv fills group name, tags and pinned', () {

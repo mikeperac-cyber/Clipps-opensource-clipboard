@@ -80,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Focus sits inside the shortcuts so Esc bubbles up to them.
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.escape): _hideWindow},
-      child: Focus(
+      child: FocusScope(
         autofocus: true,
         child: Scaffold(
           appBar: AppBar(
@@ -188,10 +188,14 @@ class _HomeScreenState extends State<HomeScreen> {
             initialText: p.searchText,
             focusRequests: p.searchFocusRequests,
             onChanged: p.setSearchText,
-            onSubmitted: (_) {
+            onSubmitted: (text) async {
+              // Wait for the list to match what was typed before picking the top clip.
+              await p.setSearchText(text);
               if (p.view == ClipView.trash || p.clips.isEmpty) return;
-              Clipboard.setData(ClipboardData(text: p.clips.first.content));
-              _hideWindow();
+              await Clipboard.setData(
+                ClipboardData(text: p.clips.first.content),
+              );
+              await _hideWindow();
             },
           ),
         ),
