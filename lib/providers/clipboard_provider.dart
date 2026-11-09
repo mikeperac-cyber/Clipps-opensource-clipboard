@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../database/db_helper.dart';
 import '../models/clip_group.dart';
@@ -25,6 +26,8 @@ class ClipboardProvider extends ChangeNotifier {
   ClipboardProvider(this._db, {this._clock = DateTime.now});
 
   final DbHelper _db;
+
+  String get dataDir => p.dirname(_db.path);
   final DateTime Function() _clock;
 
   List<ClipboardModel> _clips = [];

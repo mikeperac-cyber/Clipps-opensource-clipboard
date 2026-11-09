@@ -19,6 +19,8 @@ class DbHelper {
   final Database _db;
   DbHelper._(this._db);
 
+  String get path => _db.path;
+
   @visibleForTesting
   Database get rawDb => _db;
 

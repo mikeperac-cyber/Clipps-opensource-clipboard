@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../app_info.dart';
 import '../models/clip_view.dart';
 import '../providers/clipboard_provider.dart';
 import 'dialogs.dart';
@@ -107,6 +110,36 @@ class Sidebar extends StatelessWidget {
                     title: 'New group',
                     submit: p.createGroup,
                   ),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            key: const Key('aboutClipps'),
+            dense: true,
+            leading: const Icon(Icons.info_outline),
+            title: const Text('About Clipps'),
+            shape: const StadiumBorder(),
+            onTap: () => showAboutDialog(
+              context: context,
+              applicationName: 'Clipps',
+              applicationVersion: kAppVersion,
+              applicationLegalese: '© 2026 Clipps',
+              children: [
+                const Text(
+                  'Clipps works offline. Your clips are stored only on this PC '
+                  'and are never sent anywhere.',
+                ),
+                SelectableText(p.dataDir),
+                TextButton(
+                  key: const Key('openDataFolder'),
+                  child: const Text('Open data folder'),
+                  onPressed: () async {
+                    try {
+                      // explorer exits non-zero even on success; ignore result
+                      await Process.run('explorer.exe', [p.dataDir]);
+                    } catch (_) {}
+                  },
                 ),
               ],
             ),
