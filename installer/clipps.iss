@@ -4,7 +4,7 @@
 ; the tree-shaken subset is stale (seen with 3.1.0).
 
 #define AppName "Clipps"
-#define AppVersion "3.1.0"
+#define AppVersion "3.2.0"
 #define ReleaseDir "..\build\windows\x64\runner\Release"
 
 [Setup]
