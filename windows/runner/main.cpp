@@ -13,7 +13,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Single instance: surface the existing window instead of starting another.
   ::CreateMutexW(nullptr, TRUE, L"Local\\clipps_single_instance");
   if (::GetLastError() == ERROR_ALREADY_EXISTS) {
-    HWND existing = ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"clipps");
+    HWND existing = ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"Clipps");
     if (existing && !hidden) {
       ::ShowWindow(existing, SW_SHOW);
       ::ShowWindow(existing, SW_RESTORE);
@@ -58,7 +58,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project, hidden);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"clipps", origin, size)) {
+  if (!window.Create(L"Clipps", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
