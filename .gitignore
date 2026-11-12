@@ -13,3 +13,8 @@ build/
 *.log
 *.class
 .DS_Store
+
+# Flutter-generated Windows plugin files (rebuilt by flutter pub get / build)
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/flutter/generated_plugins.cmake
